@@ -119,7 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 准备结果输出
     let mut output = Vec::new();
 
-    output.push(format!("\n=== Bandwidth Analysis Test Results ===\n"));
+    output.push("\n=== Bandwidth Analysis Test Results ===\n".to_string());
 
     output.push(format!(
         "Configuration:\n- MIME types: {}\n- Test sizes: {}\n- Total tests: {}\n- Threads: {}\n",

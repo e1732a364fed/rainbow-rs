@@ -21,6 +21,7 @@ pub mod grid;
 pub mod houdini;
 pub mod html;
 pub mod json;
+pub mod lsb;
 pub mod octet;
 pub mod prism;
 pub mod rss;
@@ -34,6 +35,7 @@ use tracing::debug;
 
 use crate::{RainbowError, Result};
 use audio::AudioEncoder;
+use lsb::LSBEncoder;
 
 /// A trait for types that can be randomly generated
 pub trait Random {
@@ -52,11 +54,11 @@ pub trait Encoder: std::fmt::Debug + dyn_clone::DynClone + Send + Sync {
 dyn_clone::clone_trait_object!(Encoder);
 
 #[derive(Debug, Clone)]
-pub struct EncodersHolder {
+pub struct EncoderRegistry {
     encoders: HashMap<String, Box<dyn Encoder>>,
 }
 
-impl Default for EncodersHolder {
+impl Default for EncoderRegistry {
     fn default() -> Self {
         let mut encoders: HashMap<String, Box<dyn Encoder>> = HashMap::new();
         encoders.insert("html".to_string(), Box::new(html::HtmlEncoder::default()));
@@ -75,6 +77,7 @@ impl Default for EncodersHolder {
         encoders.insert("xml".to_string(), Box::new(xml::XmlEncoder::default()));
         encoders.insert("rss".to_string(), Box::new(rss::RssEncoder::default()));
         encoders.insert("audio".to_string(), Box::new(AudioEncoder::default()));
+        encoders.insert("lsb".to_string(), Box::new(LSBEncoder::default()));
         encoders.insert(
             "svg_path".to_string(),
             Box::new(svg_path::SvgPathEncoder::default()),
@@ -87,7 +90,7 @@ impl Default for EncodersHolder {
     }
 }
 
-impl EncodersHolder {
+impl EncoderRegistry {
     pub fn new_randomized() -> Self {
         let mut encoders: HashMap<String, Box<dyn Encoder>> = HashMap::new();
         encoders.insert("html".to_string(), Box::new(html::HtmlEncoder::random()));
@@ -103,6 +106,7 @@ impl EncodersHolder {
         encoders.insert("xml".to_string(), Box::new(xml::XmlEncoder::random()));
         encoders.insert("rss".to_string(), Box::new(rss::RssEncoder::random()));
         encoders.insert("audio".to_string(), Box::new(AudioEncoder::default()));
+        encoders.insert("lsb".to_string(), Box::new(LSBEncoder::random()));
         encoders.insert(
             "svg_path".to_string(),
             Box::new(svg_path::SvgPathEncoder::random()),
@@ -111,8 +115,8 @@ impl EncodersHolder {
         Self { encoders }
     }
 
-    pub fn get(&self, encoder: &str) -> Option<&Box<dyn Encoder>> {
-        self.encoders.get(encoder)
+    pub fn get(&self, encoder: &str) -> Option<&dyn Encoder> {
+        self.encoders.get(encoder).map(|encoder| encoder.as_ref())
     }
 
     pub fn add(&mut self, encoder: Box<dyn Encoder>) {
@@ -121,8 +125,8 @@ impl EncodersHolder {
 
     pub fn get_all_mime_types(&self) -> Vec<&str> {
         self.encoders
-            .iter()
-            .map(|(_, encoder)| encoder.get_mime_type())
+            .values()
+            .map(|encoder| encoder.get_mime_type())
             .collect::<HashSet<_>>()
             .into_iter()
             .collect()
@@ -132,8 +136,8 @@ impl EncodersHolder {
     pub fn get_random_mime_type(&self) -> String {
         let mime_types: Vec<&str> = self
             .encoders
-            .iter()
-            .map(|(_, encoder)| encoder.get_mime_type())
+            .values()
+            .map(|encoder| encoder.get_mime_type())
             .collect();
         mime_types
             .choose(&mut rand::thread_rng())
@@ -254,7 +258,7 @@ mod tests {
 
         init();
 
-        let encoders = EncodersHolder::default();
+        let encoders = EncoderRegistry::default();
 
         // Test all MIME types
         for mime_type in encoders.get_all_mime_types() {
@@ -266,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_random_mime_type() {
-        let encoders = EncodersHolder::default();
+        let encoders = EncoderRegistry::default();
         let mime_type = encoders.get_random_mime_type();
         assert!(encoders.get_all_mime_types().contains(&mime_type.as_str()));
     }
@@ -274,7 +278,7 @@ mod tests {
     #[test]
     fn test_unsupported_mime_type() {
         let test_data = b"Hello, Unsupported MIME Type!";
-        let encoders = EncodersHolder::default();
+        let encoders = EncoderRegistry::default();
         let encoded = encoders.encode_mime(test_data, "unsupported/type");
         assert!(encoded.is_err());
     }
@@ -283,7 +287,7 @@ mod tests {
     fn test_empty_data_mime() {
         init();
         let test_data = b"";
-        let encoders = EncodersHolder::default();
+        let encoders = EncoderRegistry::default();
         for mime_type in encoders.get_all_mime_types() {
             let encoded = encoders.encode_mime(test_data, mime_type).unwrap();
             let decoded = encoders.decode_mime(&encoded, mime_type);
@@ -297,7 +301,7 @@ mod tests {
     #[test]
     fn test_large_data_mime() {
         let test_data: Vec<u8> = (0..2000).map(|i| (i % 256) as u8).collect();
-        let encoders = EncodersHolder::default();
+        let encoders = EncoderRegistry::default();
         for mime_type in encoders.get_all_mime_types() {
             let encoded = encoders.encode_mime(&test_data, mime_type).unwrap();
             let decoded = encoders.decode_mime(&encoded, mime_type).unwrap();

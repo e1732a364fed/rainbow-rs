@@ -15,8 +15,8 @@ fn analyze_bandwidth(mime_type: &str, size: usize) -> f64 {
     if let Some(stat) = stats.first() {
         let _overhead_ratio =
             (stat.total_packet_size + stat.expected_return_size) as f64 / stat.original_size as f64;
-        let elapsed_ms = test_start.elapsed().as_secs_f64() * 1000.0;
-        elapsed_ms
+        
+        test_start.elapsed().as_secs_f64() * 1000.0
     } else {
         0.0
     }

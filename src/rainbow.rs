@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 use crate::{
-    stego::EncodersHolder,
+    stego::EncoderRegistry,
     utils::{find_crlf_crlf, generate_realistic_headers, validate_http_packet, HTTP_CONSTANTS},
     DecodeResult, EncodeResult, NetworkSteganographyProcessor, RainbowError, Result,
 };
@@ -65,13 +65,19 @@ pub struct StegoBandwidthStats {
 /// An implementation of [`NetworkSteganographyProcessor`]
 #[derive(Debug, Clone)]
 pub struct Rainbow {
-    pub encoders: EncodersHolder,
+    pub encoders: EncoderRegistry,
+}
+
+impl Default for Rainbow {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Rainbow {
     pub fn new() -> Self {
         Self {
-            encoders: EncodersHolder::new_randomized(),
+            encoders: EncoderRegistry::new_randomized(),
         }
     }
 
@@ -236,7 +242,7 @@ impl Rainbow {
         headers.push_str("\r\n");
 
         let mut response = headers.into_bytes();
-        response.extend_from_slice(&data);
+        response.extend_from_slice(data);
         Ok(response)
     }
 
@@ -359,7 +365,7 @@ impl Rainbow {
                 Ok(header_length + encoded.len())
             }
 
-            let total_len = calculate_total_length(&base_headers, &encoded)?;
+            let total_len = calculate_total_length(base_headers, &encoded)?;
 
             match total_len.cmp(&target_length) {
                 std::cmp::Ordering::Equal => {
@@ -403,7 +409,7 @@ impl Rainbow {
         ) -> (String, &'static str) {
             let mut headers = String::new();
             let path = if is_request {
-                let method = if is_small_packet { "GET" } else { "GET" };
+                let method = if is_small_packet { "GET" } else { "POST" };
                 let paths = HTTP_CONSTANTS.get_paths;
                 let path = if is_small_packet {
                     paths.iter().min_by_key(|p| p.len()).unwrap_or(&"/")
@@ -615,12 +621,10 @@ impl NetworkSteganographyProcessor for Rainbow {
                     "Client should not receive responses".to_string(),
                 ));
             }
-        } else {
-            if !is_response {
-                return Err(RainbowError::InvalidData(
-                    "Server should not receive requests".to_string(),
-                ));
-            }
+        } else if !is_response {
+            return Err(RainbowError::InvalidData(
+                "Server should not receive requests".to_string(),
+            ));
         }
 
         // 从 Cookie 中获取包信息
@@ -633,7 +637,7 @@ impl NetworkSteganographyProcessor for Rainbow {
 
         for line in header_part.lines() {
             if line.to_lowercase().starts_with("cookie:") {
-                if let Ok(value) = HeaderValue::from_str(&line[7..].trim()) {
+                if let Ok(value) = HeaderValue::from_str(line[7..].trim()) {
                     headers.append(COOKIE, value);
                 }
             }
@@ -727,7 +731,7 @@ fn add_padding_to_packet(packet: &mut Vec<u8>, padding_len: usize) -> Result<()>
     // 进行 base64 编码
     let padding = BASE64.encode(&random_bytes);
 
-    if let Some(pos) = find_crlf_crlf(&packet) {
+    if let Some(pos) = find_crlf_crlf(packet) {
         let mut new_packet = packet[..pos].to_vec();
         new_packet.extend_from_slice(b"\r\n");
         new_packet.extend_from_slice(PADDING_HEADER.as_bytes());
@@ -896,7 +900,7 @@ mod tests {
         // Verify expected return lengths
         for length in lengths_large {
             assert!(
-                length >= 200 && length <= 8000,
+                (200..=8000).contains(&length),
                 "Expected return length should be between 200 and 8000"
             );
         }
@@ -1074,7 +1078,7 @@ mod tests {
                 assert!(packet_str.starts_with(b"POST "));
                 assert!(data_find(
                     packet_str,
-                    &format!("Content-Type: {}", mime_type).as_bytes()
+                    format!("Content-Type: {}", mime_type).as_bytes()
                 )
                 .is_some());
             }

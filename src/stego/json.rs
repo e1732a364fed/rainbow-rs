@@ -28,6 +28,7 @@ use crate::Result;
 
 #[derive(Debug, Clone)]
 
+#[derive(Default)]
 pub struct JsonEncoder {}
 
 impl Random for JsonEncoder {
@@ -36,13 +37,6 @@ impl Random for JsonEncoder {
     }
 }
 
-impl Default for JsonEncoder {
-    fn default() -> Self {
-        Self {
-            // version: "1.0".to_string(),
-        }
-    }
-}
 
 impl Encoder for JsonEncoder {
     fn name(&self) -> &'static str {
