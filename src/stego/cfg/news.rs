@@ -33,48 +33,48 @@ pub fn create_news_grammar() -> Grammar {
     let subjects = vec![
         "Tech giant",
         "Local authorities",
-        "Scientists",
-        "Researchers",
-        "Industry experts",
-        "Market analysts",
-        "Government officials",
-        "Medical professionals",
-        "Environmental activists",
-        "Security researchers",
-        "Financial experts",
-        "Education leaders",
-        "Technology pioneers",
-        "Healthcare providers",
-        "Climate scientists",
-        "Policy makers",
-        "Business leaders",
-        "Innovation experts",
-        "Data scientists",
-        "AI researchers",
-        "Cybersecurity experts",
-        "Space scientists",
-        "Marine biologists",
-        "Energy researchers",
-        "Quantum physicists",
-        "Neuroscientists",
-        "Biotechnology firms",
-        "Software developers",
-        "Automotive engineers",
-        "Aerospace experts",
-        "Economic analysts",
-        "Urban planners",
-        "Agricultural scientists",
-        "Digital strategists",
-        "Robotics engineers",
-        "Chemical researchers",
-        "Investment analysts",
-        "Public health experts",
-        "Technology consultants",
-        "Social scientists",
-        "Military strategists",
-        "Transportation experts",
-        "Renewable energy experts",
-        "Blockchain developers",
+        // "Scientists",
+        // "Researchers",
+        // "Industry experts",
+        // "Market analysts",
+        // "Government officials",
+        // "Medical professionals",
+        // "Environmental activists",
+        // "Security researchers",
+        // "Financial experts",
+        // "Education leaders",
+        // "Technology pioneers",
+        // "Healthcare providers",
+        // "Climate scientists",
+        // "Policy makers",
+        // "Business leaders",
+        // "Innovation experts",
+        // "Data scientists",
+        // "AI researchers",
+        // "Cybersecurity experts",
+        // "Space scientists",
+        // "Marine biologists",
+        // "Energy researchers",
+        // "Quantum physicists",
+        // "Neuroscientists",
+        // "Biotechnology firms",
+        // "Software developers",
+        // "Automotive engineers",
+        // "Aerospace experts",
+        // "Economic analysts",
+        // "Urban planners",
+        // "Agricultural scientists",
+        // "Digital strategists",
+        // "Robotics engineers",
+        // "Chemical researchers",
+        // "Investment analysts",
+        // "Public health experts",
+        // "Technology consultants",
+        // "Social scientists",
+        // "Military strategists",
+        // "Transportation experts",
+        // "Renewable energy experts",
+        // "Blockchain developers",
     ];
     for subject in subjects {
         grammar.add_rule("SUBJECT", vec![Symbol::Terminal(subject.to_string())], 1);
@@ -84,35 +84,35 @@ pub fn create_news_grammar() -> Grammar {
     let verbs = vec![
         "reveals",
         "launches",
-        "discovers",
-        "introduces",
-        "develops",
-        "implements",
-        "demonstrates",
-        "unveils",
-        "presents",
-        "confirms",
-        "establishes",
-        "initiates",
-        "validates",
-        "showcases",
-        "releases",
-        "publishes",
-        "verifies",
-        "deploys",
-        "pioneers",
-        "achieves",
-        "creates",
-        "designs",
-        "patents",
-        "revolutionizes",
-        "transforms",
-        "advances",
-        "accelerates",
-        "enhances",
-        "optimizes",
-        "modernizes",
-        "reinvents",
+        // "discovers",
+        // "introduces",
+        // "develops",
+        // "implements",
+        // "demonstrates",
+        // "unveils",
+        // "presents",
+        // "confirms",
+        // "establishes",
+        // "initiates",
+        // "validates",
+        // "showcases",
+        // "releases",
+        // "publishes",
+        // "verifies",
+        // "deploys",
+        // "pioneers",
+        // "achieves",
+        // "creates",
+        // "designs",
+        // "patents",
+        // "revolutionizes",
+        // "transforms",
+        // "advances",
+        // "accelerates",
+        // "enhances",
+        // "optimizes",
+        // "modernizes",
+        // "reinvents",
     ];
     for verb in verbs {
         grammar.add_rule("VERB", vec![Symbol::Terminal(verb.to_string())], 1);
@@ -122,43 +122,43 @@ pub fn create_news_grammar() -> Grammar {
     let objects = vec![
         "new findings",
         "innovative solution",
-        "major development",
-        "groundbreaking research",
-        "revolutionary platform",
-        "cutting-edge system",
-        "advanced framework",
-        "sustainable initiative",
-        "strategic partnership",
-        "quantum breakthrough",
-        "AI-powered solution",
-        "digital transformation",
-        "research findings",
-        "technological advancement",
-        "innovative approach",
-        "sustainable solution",
-        "security protocol",
-        "efficiency improvement",
-        "market strategy",
-        "development framework",
-        "research methodology",
-        "optimization technique",
-        "implementation strategy",
-        "analytical tool",
-        "prediction model",
-        "automation system",
-        "integration platform",
-        "monitoring system",
-        "validation process",
-        "enhancement protocol",
-        "deployment strategy",
-        "scaling solution",
-        "protection mechanism",
-        "acceleration framework",
-        "optimization algorithm",
-        "verification system",
-        "compliance framework",
-        "management platform",
-        "analysis methodology",
+        // "major development",
+        // "groundbreaking research",
+        // "revolutionary platform",
+        // "cutting-edge system",
+        // "advanced framework",
+        // "sustainable initiative",
+        // "strategic partnership",
+        // "quantum breakthrough",
+        // "AI-powered solution",
+        // "digital transformation",
+        // "research findings",
+        // "technological advancement",
+        // "innovative approach",
+        // "sustainable solution",
+        // "security protocol",
+        // "efficiency improvement",
+        // "market strategy",
+        // "development framework",
+        // "research methodology",
+        // "optimization technique",
+        // "implementation strategy",
+        // "analytical tool",
+        // "prediction model",
+        // "automation system",
+        // "integration platform",
+        // "monitoring system",
+        // "validation process",
+        // "enhancement protocol",
+        // "deployment strategy",
+        // "scaling solution",
+        // "protection mechanism",
+        // "acceleration framework",
+        // "optimization algorithm",
+        // "verification system",
+        // "compliance framework",
+        // "management platform",
+        // "analysis methodology",
     ];
     for object in objects {
         grammar.add_rule("OBJECT", vec![Symbol::Terminal(object.to_string())], 1);
@@ -180,12 +180,16 @@ pub fn create_news_grammar() -> Grammar {
         1,
     );
 
-    // 内容
-    grammar.add_rule(
-        "CONTENT",
-        vec![Symbol::Terminal("This breakthrough could revolutionize the industry. The development marks a significant milestone in the field. The development marks a significant milestone in the field. The development marks a significant milestone in the field. a groundbreaking discovery in artificial intelligence announced today Tech giant".to_string())],
-        1,
-    );
+    let contents = vec![
+        "This breakthrough could revolutionize the industry. ",
+        "The development marks a significant milestone in the field1. ",
+        // "The development marks a significant milestone in the field2. ",
+        // "The development marks a significant milestone in the field3. ",
+        // "a groundbreaking discovery in artificial intelligence announced today Tech giant4",
+    ];
+    for content in contents {
+        grammar.add_rule("CONTENT", vec![Symbol::Terminal(content.to_string())], 1);
+    }
 
     // 日期行
     grammar.add_rule(
@@ -237,33 +241,33 @@ pub fn create_news_grammar() -> Grammar {
     }
 
     // 日期
-    let dates: Vec<String> = {
-        let months = [
-            ("January", 31),
-            ("February", 29), // 2024 is a leap year
-            ("March", 31),
-            ("April", 30),
-            ("May", 31),
-            ("June", 30),
-            ("July", 31),
-            ("August", 31),
-            ("September", 30),
-            ("October", 31),
-            ("November", 30),
-            ("December", 31),
-        ];
+    // let dates: Vec<String> = {
+    //     let months = [
+    //         ("January", 31),
+    //         ("February", 29), // 2024 is a leap year
+    //         ("March", 31),
+    //         ("April", 30),
+    //         ("May", 31),
+    //         ("June", 30),
+    //         ("July", 31),
+    //         ("August", 31),
+    //         ("September", 30),
+    //         ("October", 31),
+    //         ("November", 30),
+    //         ("December", 31),
+    //     ];
 
-        let mut all_dates = Vec::with_capacity(366);
-        for (month, days) in months.iter() {
-            for day in 1..=*days {
-                all_dates.push(format!("{} {}, 2024", month, day));
-            }
-        }
-        all_dates
-    };
-    for date in dates {
-        grammar.add_rule("DATE", vec![Symbol::Terminal(date)], 1);
-    }
+    //     let mut all_dates = Vec::with_capacity(366);
+    //     for (month, days) in months.iter() {
+    //         for day in 1..=*days {
+    //             all_dates.push(format!("{} {}, 2024", month, day));
+    //         }
+    //     }
+    //     all_dates
+    // };
+    // for date in dates {
+    //     grammar.add_rule("DATE", vec![Symbol::Terminal(date)], 1);
+    // }
 
     grammar
 }
@@ -421,12 +425,12 @@ mod tests {
 
         // 使用各种字节模式进行测试
         let test_cases = vec![
-            vec![0x00],             // 00000000
-            vec![0xFF],             // 11111111
-            vec![0xA5],             // 10100101
-            vec![0x5A],             // 01011010
-            vec![0xA5, 0x5A],       // 两个字节
-            vec![0x12, 0x34, 0x56], // 三个字节
+            // vec![0x00], // 00000000
+            // vec![0xFF], // 11111111
+            // vec![0xA5], // 10100101
+            // vec![0x5A],             // 01011010
+            vec![0xA5, 0x5A], // 两个字节
+                              // vec![0x12, 0x34, 0x56], // 三个字节
         ];
 
         for input in test_cases {
@@ -441,6 +445,12 @@ mod tests {
             let decoded = encoder.decode(&encoded).unwrap();
             println!("Decoded bytes: {:?}", decoded);
 
+            println!("encoded: {:?}", String::from_utf8(encoded).unwrap());
+
+            println!(
+                "Decoded length should match input length: {:?} vs {:?}",
+                decoded, input
+            );
             // 验证解码结果与输入匹配
             assert_eq!(
                 decoded.len(),

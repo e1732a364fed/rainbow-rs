@@ -48,8 +48,13 @@ impl Grammar {
 
     fn bits_needed(productions_len: usize) -> usize {
         if productions_len <= 1 {
+            println!("productions_len <= 1");
             0
         } else {
+            println!(
+                " (productions_len as f64).log2(): {}",
+                (productions_len as f64).log2()
+            );
             (productions_len as f64).log2().ceil() as usize
         }
     }
@@ -62,78 +67,99 @@ impl Grammar {
         let mut next_position = 0;
 
         let mut stack = vec![self.start_symbol.as_str()];
+
+        println!("start_symbol: {}", self.start_symbol);
         let mut visited = HashSet::new();
 
-        while let Some(non_terminal) = stack.pop() {
-            // 避免重复访问相同的非终结符和位置组合
-            if !visited.insert(non_terminal.to_string()) {
-                continue;
-            }
+        // 只要还有未使用的比特，就继续生成
+        while bits_used < bits.len() {
+            println!("bits_used: {}", bits_used);
+            stack.push(self.start_symbol.as_str());
+            visited.clear();
 
-            if let Some(productions) = self.rules.get(non_terminal) {
-                let bits_needed = Self::bits_needed(productions.len());
+            while let Some(non_terminal) = stack.pop() {
+                println!("non_terminal: {}", non_terminal);
+                // 避免重复访问相同的非终结符和位置组合
+                if !visited.insert(non_terminal.to_string()) {
+                    continue;
+                }
 
-                // 如果没有足够的比特，使用第一个产生式
-                if bits_used >= bits.len() {
-                    let production = &productions[0];
+                if let Some(productions) = self.rules.get(non_terminal) {
+                    println!("productions: {:?}", productions);
+                    let bits_needed = Self::bits_needed(productions.len());
+
+                    println!("bits_needed: {}", bits_needed);
+
+                    println!("bits_used: {}", bits_used);
+                    println!("bits.len(): {}", bits.len());
+
+                    // 如果没有足够的比特，使用第一个产生式
+                    if bits_used >= bits.len() {
+                        let production = &productions[0];
+                        for symbol in production.symbols.iter() {
+                            match symbol {
+                                Symbol::Terminal(s) => {
+                                    word_positions.push((next_position, s.as_str()));
+                                    next_position += 1;
+                                }
+                                Symbol::NonTerminal(nt) => {
+                                    stack.push(nt.as_str());
+                                }
+                            }
+                        }
+                        continue;
+                    }
+
+                    // 计算可用的比特数
+                    let available_bits = bits_needed.min(bits.len() - bits_used);
+                    let mut index = 0usize;
+
+                    // 从比特流中读取索引
+                    for i in (0..available_bits).rev() {
+                        index = (index << 1) | ((bits[bits_used + i] & 1) as usize);
+                    }
+
+                    // 确保索引在有效范围内
+                    let original_index = index;
+                    index = index % productions.len();
+
+                    // 打印调试信息（确保不会越界）
+                    if bits_needed > 0 {
+                        let debug_start = bits_used;
+                        let debug_end = (bits_used + bits_needed).min(bits.len());
+                        let debug_bits = if debug_start < debug_end {
+                            &bits[debug_start..debug_end]
+                        } else {
+                            &[]
+                        };
+                        println!(
+                            "Choosing production {} from {} options using {} bits: {:?} (original index: {}, bits_used: {})",
+                            index,
+                            productions.len(),
+                            bits_needed,
+                            debug_bits,
+                            original_index,
+                            bits_used
+                        );
+                    }
+
+                    bits_used += bits_needed;
+
+                    let production = &productions[index];
                     for symbol in production.symbols.iter() {
                         match symbol {
                             Symbol::Terminal(s) => {
                                 word_positions.push((next_position, s.as_str()));
                                 next_position += 1;
+                                println!(
+                                    " word_positions.push((next_position, s.as_str()));, next_position: {}, s.as_str(): {}",
+                                    next_position, s.as_str()
+                                );
                             }
                             Symbol::NonTerminal(nt) => {
+                                println!(" stack.push(nt.as_str()); {}", nt.as_str());
                                 stack.push(nt.as_str());
                             }
-                        }
-                    }
-                    continue;
-                }
-
-                // 计算可用的比特数
-                let available_bits = bits_needed.min(bits.len() - bits_used);
-                let mut index = 0usize;
-
-                // 从比特流中读取索引
-                for i in (0..available_bits).rev() {
-                    index = (index << 1) | ((bits[bits_used + i] & 1) as usize);
-                }
-
-                // 确保索引在有效范围内
-                let original_index = index;
-                index = index % productions.len();
-
-                // 打印调试信息（确保不会越界）
-                if bits_needed > 0 {
-                    let debug_start = bits_used;
-                    let debug_end = (bits_used + bits_needed).min(bits.len());
-                    let debug_bits = if debug_start < debug_end {
-                        &bits[debug_start..debug_end]
-                    } else {
-                        &[]
-                    };
-                    println!(
-                        "Choosing production {} from {} options using {} bits: {:?} (original index: {}, bits_used: {})",
-                        index,
-                        productions.len(),
-                        bits_needed,
-                        debug_bits,
-                        original_index,
-                        bits_used
-                    );
-                }
-
-                bits_used += bits_needed;
-
-                let production = &productions[index];
-                for symbol in production.symbols.iter() {
-                    match symbol {
-                        Symbol::Terminal(s) => {
-                            word_positions.push((next_position, s.as_str()));
-                            next_position += 1;
-                        }
-                        Symbol::NonTerminal(nt) => {
-                            stack.push(nt.as_str());
                         }
                     }
                 }
@@ -149,7 +175,7 @@ impl Grammar {
         }
 
         // 返回实际使用的字节数（向上取整）
-        let bytes_used = (bits_used + 7) / 8;
+        let bytes_used = (bits_used) / 8;
         (output, bytes_used)
     }
 
@@ -281,7 +307,7 @@ impl Grammar {
 
         // 计算需要的完整字节数
         let actual_bits_used = decoded_bits.len();
-        let bytes_needed = (actual_bits_used + 7) / 8;
+        let bytes_needed = (actual_bits_used) / 8;
 
         // 确保 decoded_bits 的长度是 8 的倍数
         while decoded_bits.len() < bytes_needed * 8 {
