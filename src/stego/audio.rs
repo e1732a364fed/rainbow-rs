@@ -150,13 +150,11 @@ impl Encoder for AudioEncoder {
         "audio"
     }
 
-    fn encode(&self, data: &[u8]) -> Result<String> {
+    fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
         debug!("Encoding data using Web Audio API stego");
 
         if data.is_empty() {
-            return Ok(String::from(
-                "<audio id=\"stego-audio\" style=\"display:none\"></audio>",
-            ));
+            return Ok(b"<audio id=\"stego-audio\" style=\"display:none\"></audio>".to_vec());
         }
 
         let data = if data.len() > 1000 {
@@ -179,81 +177,45 @@ impl Encoder for AudioEncoder {
         // Base64 encoding
         let encoded = general_purpose::STANDARD.encode(audio_str);
 
-        Ok(format!(
-            "<audio id=\"stego-audio\" style=\"display:none\">\
-            <source src=\"data:audio/wav;base64,{}\" type=\"audio/wav\">\
-            </audio>",
+        // Generate HTML
+        let html = format!(
+            "<audio id=\"stego-audio\" style=\"display:none\" data-audio=\"{}\"></audio>",
             encoded
-        ))
+        );
+
+        Ok(html.into_bytes())
     }
 
-    fn decode(&self, content: &str) -> Result<Vec<u8>> {
-        debug!("Decoding data from Web Audio API stego");
-
-        if content.is_empty() {
-            warn!("Empty audio content");
+    fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
+        let content = String::from_utf8_lossy(content);
+        if content.is_empty() || !content.contains("audio") {
             return Ok(Vec::new());
         }
 
-        if content
-            .trim()
-            .matches(|c| c == '<' || c == '>' || c == ' ')
-            .count()
-            == content.trim().len()
-        {
-            debug!("Empty audio element found");
-            return Ok(Vec::new());
-        }
-
-        // Extract Base64 encoded audio data
-        let base64_data = match content
-            .split("base64,")
+        // Extract base64 encoded data
+        if let Some(encoded) = content
+            .split("data-audio=\"")
             .nth(1)
             .and_then(|s| s.split('"').next())
         {
-            Some(data) => data,
-            None => {
-                warn!("No audio data found in content");
-                return Ok(Vec::new());
-            }
-        };
+            // Decode base64
+            if let Ok(audio_str) = general_purpose::STANDARD.decode(encoded) {
+                if let Ok(audio_str) = String::from_utf8(audio_str) {
+                    // Parse audio samples
+                    let samples: Vec<f64> = audio_str
+                        .split(',')
+                        .filter_map(|s| s.parse::<f64>().ok())
+                        .collect();
 
-        // Decode Base64 data
-        let decoded = match general_purpose::STANDARD.decode(base64_data) {
-            Ok(data) => data,
-            Err(e) => {
-                warn!("Failed to decode base64 audio data: {}", e);
-                return Ok(Vec::new());
-            }
-        };
-
-        let decoded_str = match String::from_utf8(decoded) {
-            Ok(s) => s,
-            Err(e) => {
-                warn!("Failed to convert decoded data to string: {}", e);
-                return Ok(Vec::new());
-            }
-        };
-
-        // Convert decoded data to sample array
-        let samples: Vec<f64> = decoded_str
-            .split(',')
-            .filter_map(|s| s.parse().ok())
-            .collect();
-
-        if samples.is_empty() {
-            warn!("No valid audio samples found");
-            return Ok(Vec::new());
-        }
-
-        // Extract hidden data
-        match self.extract_data(&samples) {
-            Some(data) => Ok(data),
-            None => {
-                warn!("Failed to extract data from audio samples");
-                Ok(Vec::new())
+                    // Extract data from samples
+                    if let Some(data) = self.extract_data(&samples) {
+                        return Ok(data);
+                    }
+                }
             }
         }
+
+        Ok(Vec::new())
     }
 }
 
@@ -269,8 +231,8 @@ mod tests {
         // Test encoding
         let encoded = encoder.encode(test_data).unwrap();
         assert!(!encoded.is_empty());
-        assert!(encoded.contains("audio"));
-        assert!(encoded.contains("base64"));
+        assert!(String::from_utf8_lossy(&encoded).contains("audio"));
+        assert!(String::from_utf8_lossy(&encoded).contains("base64"));
 
         // Test decoding
         let decoded = encoder.decode(&encoded).unwrap();
@@ -285,7 +247,7 @@ mod tests {
         // Test encoding empty data
         let encoded = encoder.encode(test_data).unwrap();
         assert!(!encoded.is_empty());
-        assert!(encoded.contains("audio"));
+        assert!(String::from_utf8_lossy(&encoded).contains("audio"));
 
         // Test decoding empty data
         let decoded = encoder.decode(&encoded).unwrap();
@@ -300,7 +262,7 @@ mod tests {
         // Test encoding large data
         let encoded = encoder.encode(&test_data).unwrap();
         assert!(!encoded.is_empty());
-        assert!(encoded.contains("audio"));
+        assert!(String::from_utf8_lossy(&encoded).contains("audio"));
 
         // Test decoding large data
         let decoded = encoder.decode(&encoded).unwrap();
@@ -313,13 +275,13 @@ mod tests {
         let encoder = AudioEncoder::default();
 
         // Test decoding invalid input
-        let decoded = encoder.decode("invalid audio data").unwrap();
+        let decoded = encoder.decode(b"invalid audio data").unwrap();
         assert!(decoded.is_empty());
 
-        let decoded = encoder.decode("").unwrap();
+        let decoded = encoder.decode(b"").unwrap();
         assert!(decoded.is_empty());
 
-        let decoded = encoder.decode("<audio></audio>").unwrap();
+        let decoded = encoder.decode(b"<audio></audio>").unwrap();
         assert!(decoded.is_empty());
     }
 }

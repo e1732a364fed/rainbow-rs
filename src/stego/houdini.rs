@@ -15,7 +15,46 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use crate::stego::Encoder;
 use crate::Result;
+
+pub struct HoudiniEncoder {
+    worklet_name: String,
+    class_name: String,
+    property_name: String,
+    painter_class_name: String,
+}
+
+impl Default for HoudiniEncoder {
+    fn default() -> Self {
+        Self {
+            worklet_name: "stego-paint".to_string(),
+            class_name: "stego-container".to_string(),
+            property_name: "--stego-params".to_string(),
+            painter_class_name: "CustomPainter".to_string(),
+        }
+    }
+}
+
+impl Encoder for HoudiniEncoder {
+    fn name(&self) -> &'static str {
+        "houdini"
+    }
+
+    fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
+        encode(
+            data,
+            &self.worklet_name,
+            &self.class_name,
+            &self.property_name,
+            &self.painter_class_name,
+        )
+    }
+
+    fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
+        decode(content)
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PaintParam {
@@ -79,51 +118,68 @@ fn decode_from_paint_params(params: &[PaintParam]) -> Vec<u8> {
 }
 
 /// Generate CSS Paint Worklet code
-fn generate_paint_worklet() -> String {
-    r#"if (typeof registerPaint !== 'undefined') {
-    class StegoPainter {
-        static get inputProperties() {
-            return ['--stego-params'];
-        }
+fn generate_paint_worklet(
+    worklet_name: &str,
+    property_name: &str,
+    painter_class_name: &str,
+) -> String {
+    format!(
+        r#"if (typeof registerPaint !== 'undefined') {{
+    class {} {{
+        static get inputProperties() {{
+            return ['{}'];
+        }}
 
-        paint(ctx, size, properties) {
-            const params = JSON.parse(properties.get('--stego-params'));
-            params.forEach(param => {
+        paint(ctx, size, properties) {{
+            const params = JSON.parse(properties.get('{}'));
+            params.forEach(param => {{
                 ctx.fillStyle = param.color;
                 const x = size.width * param.offset;
                 const y = size.height * param.offset;
                 const s = param.size;
                 ctx.fillRect(x, y, s, s);
-            });
-        }
-    }
-    registerPaint('stego-pattern', StegoPainter);
-}"#
-    .to_string()
+            }});
+        }}
+    }}
+    registerPaint('{}', {});
+}}"#,
+        painter_class_name, property_name, property_name, worklet_name, painter_class_name
+    )
 }
 
 /// Generate CSS style using Paint Worklet
-fn generate_css_style(params: &[PaintParam]) -> Result<String> {
+fn generate_css_style(
+    params: &[PaintParam],
+    class_name: &str,
+    property_name: &str,
+    worklet_name: &str,
+) -> Result<String> {
     let json_str = serde_json::to_string(params)?;
     Ok(format!(
-        r#"@property --stego-params {{
+        r#"@property {} {{
     syntax: '*';
     inherits: false;
     initial-value: '{}';
 }}
-.stego-container {{
-    --stego-params: '{}';
-    background-image: paint(stego-pattern);
+.{} {{
+    {}: '{}';
+    background-image: paint({});
 }}"#,
-        json_str, json_str
+        property_name, json_str, class_name, property_name, json_str, worklet_name
     ))
 }
 
 /// Encode data to CSS Paint Worklet
-pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
+pub fn encode(
+    data: &[u8],
+    worklet_name: &str,
+    class_name: &str,
+    property_name: &str,
+    painter_class_name: &str,
+) -> Result<Vec<u8>> {
     let params = encode_to_paint_params(data);
-    let worklet = generate_paint_worklet();
-    let style = generate_css_style(&params)?;
+    let worklet = generate_paint_worklet(worklet_name, property_name, painter_class_name);
+    let style = generate_css_style(&params, class_name, property_name, worklet_name)?;
 
     let output = json!({
         "worklet": worklet,
@@ -163,7 +219,14 @@ mod tests {
     #[test]
     fn test_houdini() {
         let test_data = b"Hello, Houdini Steganography!";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(
+            test_data,
+            "stego-paint",
+            "stego-container",
+            "--stego-params",
+            "CustomPainter",
+        )
+        .unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert_eq!(decoded, test_data);
@@ -172,7 +235,14 @@ mod tests {
     #[test]
     fn test_empty_data() {
         let test_data = b"";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(
+            test_data,
+            "stego-paint",
+            "stego-container",
+            "--stego-params",
+            "CustomPainter",
+        )
+        .unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert!(decoded.is_empty());
@@ -181,7 +251,14 @@ mod tests {
     #[test]
     fn test_large_data() {
         let test_data: Vec<u8> = (0..2000).map(|i| (i % 256) as u8).collect();
-        let encoded = encode(&test_data).unwrap();
+        let encoded = encode(
+            &test_data,
+            "stego-paint",
+            "stego-container",
+            "--stego-params",
+            "CustomPainter",
+        )
+        .unwrap();
         let decoded = decode(&encoded).unwrap();
         assert!(!decoded.is_empty());
     }

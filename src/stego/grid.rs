@@ -14,12 +14,39 @@ Key features:
 Suitable for hiding data in CSS stylesheets where Grid/Flex layouts are expected.
 */
 
+use crate::stego::Encoder;
 use crate::Result;
 use regex::Regex;
 use tracing::{debug, info};
 
+pub struct GridEncoder {
+    container_class: String,
+}
+
+impl Default for GridEncoder {
+    fn default() -> Self {
+        Self {
+            container_class: "stego-container".to_string(),
+        }
+    }
+}
+
+impl Encoder for GridEncoder {
+    fn name(&self) -> &'static str {
+        "grid"
+    }
+
+    fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
+        encode(data, &self.container_class)
+    }
+
+    fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
+        decode(content)
+    }
+}
+
 /// Encode byte data as CSS Grid/Flex properties
-pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
+pub fn encode(data: &[u8], container_class: &str) -> Result<Vec<u8>> {
     debug!("Encoding data using CSS Grid/Flex steganography");
 
     if data.is_empty() {
@@ -30,7 +57,7 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
     let mut grid_template = Vec::new();
 
     // Create container style
-    css.push(".stego-container {".to_string());
+    css.push(format!(".{} {{", container_class));
     css.push("  display: grid;".to_string());
     css.push("  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));".to_string());
 
@@ -124,7 +151,7 @@ mod tests {
     #[test]
     fn test_grid() {
         let test_data = b"Hello, Grid Steganography!";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(test_data, "stego-container").unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert_eq!(decoded, test_data);
@@ -133,7 +160,7 @@ mod tests {
     #[test]
     fn test_empty_data() {
         let test_data = b"";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(test_data, "stego-container").unwrap();
         assert!(encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert!(decoded.is_empty());
@@ -142,7 +169,7 @@ mod tests {
     #[test]
     fn test_large_data() {
         let test_data: Vec<u8> = (0..2000).map(|i| (i % 256) as u8).collect();
-        let encoded = encode(&test_data).unwrap();
+        let encoded = encode(&test_data, "stego-container").unwrap();
         let decoded = decode(&encoded).unwrap();
         assert!(!decoded.is_empty());
     }
@@ -158,7 +185,7 @@ mod tests {
     #[test]
     fn test_detect() {
         let test_data = b"Hello, Grid!";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(test_data, "stego-container").unwrap();
         assert!(detect(&encoded));
         assert!(!detect(b"Regular CSS content"));
     }

@@ -16,20 +16,51 @@ Key features:
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rand::seq::SliceRandom;
 
+use crate::stego::Encoder;
 use crate::Result;
+
+pub struct HtmlEncoder {
+    page_title: String,
+    heading: String,
+    content: String,
+}
+
+impl Default for HtmlEncoder {
+    fn default() -> Self {
+        Self {
+            page_title: "Welcome".to_string(),
+            heading: "Welcome to our site".to_string(),
+            content: "This is a sample page.".to_string(),
+        }
+    }
+}
+
+impl Encoder for HtmlEncoder {
+    fn name(&self) -> &'static str {
+        "html"
+    }
+
+    fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
+        encode(data, &self.page_title, &self.heading, &self.content)
+    }
+
+    fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
+        decode(content)
+    }
+}
 
 const HTML_TEMPLATES: &[&str] = &[
     r#"<!DOCTYPE html>
 <html>
 <head>
-    <title>Welcome</title>
+    <title>{title}</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
     <div class="container">
-        <h1>Welcome to our site</h1>
-        <p>This is a sample page.</p>
+        <h1>{heading}</h1>
+        <p>{content}</p>
         <!-- {data} -->
     </div>
 </body>
@@ -37,16 +68,16 @@ const HTML_TEMPLATES: &[&str] = &[
     r#"<!DOCTYPE html>
 <html>
 <head>
-    <title>Blog</title>
+    <title>{title}</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
     <article>
-        <h1>Latest News</h1>
+        <h1>{heading}</h1>
         <section>
             <!-- {data} -->
-            <p>Stay tuned for more updates!</p>
+            <p>{content}</p>
         </section>
     </article>
 </body>
@@ -54,7 +85,7 @@ const HTML_TEMPLATES: &[&str] = &[
 ];
 
 /// Encode data into HTML comments
-pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
+pub fn encode(data: &[u8], page_title: &str, heading: &str, content: &str) -> Result<Vec<u8>> {
     // Handle empty data case
     if data.is_empty() {
         return Ok(b"<!DOCTYPE html><html><head></head><body></body></html>".to_vec());
@@ -65,7 +96,11 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
 
     // Ensure encoded data doesn't contain "--" sequence
     let safe_encoded = encoded.replace("--", "-&#45;");
-    let html = template.replace("{data}", &safe_encoded);
+    let html = template
+        .replace("{data}", &safe_encoded)
+        .replace("{title}", page_title)
+        .replace("{heading}", heading)
+        .replace("{content}", content);
 
     Ok(html.into_bytes())
 }
@@ -103,7 +138,7 @@ mod tests {
     #[test]
     fn test_html() {
         let test_data = b"Hello, HTML Steganography!";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(test_data, "Test Page", "Test Heading", "Test Content").unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert_eq!(decoded, test_data);
@@ -112,7 +147,7 @@ mod tests {
     #[test]
     fn test_empty_data() {
         let test_data = b"";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(test_data, "Test Page", "Test Heading", "Test Content").unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert!(decoded.is_empty());
@@ -121,7 +156,7 @@ mod tests {
     #[test]
     fn test_large_data() {
         let test_data: Vec<u8> = (0..2000).map(|i| (i % 256) as u8).collect();
-        let encoded = encode(&test_data).unwrap();
+        let encoded = encode(&test_data, "Test Page", "Test Heading", "Test Content").unwrap();
         let decoded = decode(&encoded).unwrap();
         assert!(!decoded.is_empty());
     }

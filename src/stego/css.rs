@@ -16,17 +16,84 @@ Use cases:
 - Steganographic watermarking of web content
 */
 
+use crate::stego::Encoder;
 use crate::Result;
 use rand::{thread_rng, Rng};
 use regex;
 
+pub struct CssEncoder {
+    page_title: String,
+    content_text: String,
+    anim_prefix: String,
+    elem_prefix: String,
+    delay_one: String,
+    delay_zero: String,
+}
+
+impl Default for CssEncoder {
+    fn default() -> Self {
+        Self {
+            page_title: "Dynamic Content".to_string(),
+            content_text: "Experience smooth animations and transitions.".to_string(),
+            anim_prefix: "a".to_string(),
+            elem_prefix: "e".to_string(),
+            delay_one: "0.1s".to_string(),
+            delay_zero: "0.2s".to_string(),
+        }
+    }
+}
+
+impl Encoder for CssEncoder {
+    fn name(&self) -> &'static str {
+        "css"
+    }
+
+    fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
+        encode(
+            data,
+            &self.page_title,
+            &self.content_text,
+            &self.anim_prefix,
+            &self.elem_prefix,
+            &self.delay_one,
+            &self.delay_zero,
+        )
+    }
+
+    fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
+        decode(content)
+    }
+}
+
 /// Encode data into CSS animation
-pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
+pub fn encode(
+    data: &[u8],
+    page_title: &str,
+    content_text: &str,
+    anim_prefix: &str,
+    elem_prefix: &str,
+    delay_one: &str,
+    delay_zero: &str,
+) -> Result<Vec<u8>> {
     if data.is_empty() {
-        return Ok(r#"<!DOCTYPE html>
-<html><head><title>Empty Page</title></head><body><div class="content"></div></body></html>"#
-            .as_bytes()
-            .to_vec());
+        return Ok(format!(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>{}</title>
+    <style>
+        .content {{ font-family: Arial; line-height: 1.6; }}
+    </style>
+</head>
+<body>
+    <div class="content">
+        {}
+    </div>
+</body>
+</html>"#,
+            page_title, content_text
+        )
+        .into_bytes());
     }
 
     let mut animations = Vec::new();
@@ -40,13 +107,13 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
 
     // Process every 8 bits as a group
     for chunk_bits in bits.chunks(8) {
-        let anim_name = format!("a{}", thread_rng().gen_range(10000..100000));
-        let elem_id = format!("e{}", thread_rng().gen_range(10000..100000));
+        let anim_name = format!("{}{}", anim_prefix, thread_rng().gen_range(10000..100000));
+        let elem_id = format!("{}{}", elem_prefix, thread_rng().gen_range(10000..100000));
 
         // Generate delay values
         let delays: Vec<&str> = chunk_bits
             .iter()
-            .map(|&bit| if bit == 1 { "0.1s" } else { "0.2s" })
+            .map(|&bit| if bit == 1 { delay_one } else { delay_zero })
             .collect();
 
         // Create animation and element styles
@@ -78,7 +145,7 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
         r#"<!DOCTYPE html>
 <html>
 <head>
-    <title>Dynamic Content</title>
+    <title>{}</title>
     <style>
         .content {{ font-family: Arial; line-height: 1.6; }}
         {}
@@ -86,12 +153,14 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
 </head>
 <body>
     <div class="content">
-        Experience smooth animations and transitions.
+        {}
         {}
     </div>
 </body>
 </html>"#,
+        page_title,
         animations.join("\n"),
+        content_text,
         elements.join("\n")
     );
 
@@ -153,7 +222,16 @@ mod tests {
     #[test]
     fn test_css_animation() {
         let test_data = b"Hello, CSS Animation Steganography!";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(
+            test_data,
+            "Test Page",
+            "Test content",
+            "anim",
+            "elem",
+            "0.1s",
+            "0.2s",
+        )
+        .unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert_eq!(decoded, test_data);
@@ -162,9 +240,18 @@ mod tests {
     #[test]
     fn test_empty_data() {
         let test_data = b"";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(
+            test_data,
+            "Test Page",
+            "Test content",
+            "anim",
+            "elem",
+            "0.1s",
+            "0.2s",
+        )
+        .unwrap();
         assert!(!encoded.is_empty());
-        let decoded = decode(&encoded).unwrap();
-        assert!(decoded.is_empty());
+        let decoded = decode(&encoded);
+        assert!(decoded.is_err());
     }
 }

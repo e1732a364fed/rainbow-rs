@@ -22,10 +22,39 @@ use chrono::Utc;
 use rand::{seq::SliceRandom, Rng};
 use tracing::{debug, info, warn};
 
+use crate::stego::Encoder;
 use crate::Result;
 
+const VISIBLE_VALUES: &[&str] = &["default", "enabled", "true", "active", "1"];
+
+pub struct XmlEncoder {
+    root_tag: String,
+}
+
+impl Default for XmlEncoder {
+    fn default() -> Self {
+        Self {
+            root_tag: "configuration".to_string(),
+        }
+    }
+}
+
+impl Encoder for XmlEncoder {
+    fn name(&self) -> &'static str {
+        "xml"
+    }
+
+    fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
+        encode(data, &self.root_tag)
+    }
+
+    fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
+        decode(content)
+    }
+}
+
 /// Encode data into XML
-pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
+pub fn encode(data: &[u8], root_tag: &str) -> Result<Vec<u8>> {
     debug!("Encoding data using XML steganography");
 
     // Generate random attribute names
@@ -40,14 +69,14 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
 
     let result = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
-<configuration timestamp="{}">
+<{root_tag} timestamp="{}">
     <settings>
         <property name="{}" value="{}"/>
         <property name="theme" value="default"/>
         <property name="language" value="en"/>
     </settings>
     <data><![CDATA[{}]]></data>
-</configuration>"#,
+</{root_tag}>"#,
         Utc::now().timestamp(),
         random_prop,
         random_value,
@@ -57,8 +86,6 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
     // debug!("Generated XML content:\n{}", result);
     Ok(result.into_bytes())
 }
-
-const VISIBLE_VALUES: &[&str] = &["enabled", "disabled", "auto", "manual", "default"];
 
 /// Decode data from XML
 pub fn decode(xml_content: &[u8]) -> Result<Vec<u8>> {
@@ -97,7 +124,7 @@ mod tests {
     #[test]
     fn test_xml() {
         let test_data = b"Hello, XML Steganography!";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(test_data, "configuration").unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert_eq!(decoded, test_data);
@@ -106,7 +133,7 @@ mod tests {
     #[test]
     fn test_empty_data() {
         let test_data = b"";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(test_data, "configuration").unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert!(decoded.is_empty());
@@ -115,7 +142,7 @@ mod tests {
     #[test]
     fn test_large_data() {
         let test_data: Vec<u8> = (0..2000).map(|i| (i % 256) as u8).collect();
-        let encoded = encode(&test_data).unwrap();
+        let encoded = encode(&test_data, "configuration").unwrap();
         let decoded = decode(&encoded).unwrap();
         assert!(!decoded.is_empty());
     }

@@ -19,8 +19,35 @@ Usage scenarios:
 - Cases requiring visual steganography with SVG support
 */
 
+use crate::stego::Encoder;
 use crate::Result;
 use tracing::{debug, info, warn};
+
+pub struct SvgPathEncoder {
+    viewbox_size: (u32, u32),
+}
+
+impl Default for SvgPathEncoder {
+    fn default() -> Self {
+        Self {
+            viewbox_size: (800, 600),
+        }
+    }
+}
+
+impl Encoder for SvgPathEncoder {
+    fn name(&self) -> &'static str {
+        "svg_path"
+    }
+
+    fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
+        encode(data, self.viewbox_size)
+    }
+
+    fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
+        decode(content)
+    }
+}
 
 /// Convert bytes to SVG path animation
 fn byte_to_path(byte: u8, index: usize) -> String {
@@ -32,7 +59,7 @@ fn byte_to_path(byte: u8, index: usize) -> String {
             <animate
                 attributeName="d"
                 dur="{}.{}s"
-                values="M {},{} Q{},{} {},{};
+                values="M {},{} Q{},{} {},{}
                        M {},{} Q{},{} {},{}"
                 repeatCount="indefinite"/>
         </path>"#,
@@ -61,7 +88,7 @@ fn byte_to_path(byte: u8, index: usize) -> String {
 }
 
 /// Generate complete SVG document
-fn generate_svg_document(paths: &[String]) -> String {
+fn generate_svg_document(paths: &[String], viewbox_size: (u32, u32)) -> String {
     format!(
         r#"<!DOCTYPE html>
 <html>
@@ -73,7 +100,7 @@ fn generate_svg_document(paths: &[String]) -> String {
     </style>
 </head>
 <body>
-    <svg viewBox="0 0 200 200">
+    <svg viewBox="0 0 {} {}">
         <defs>
             <filter id="blur">
                 <feGaussianBlur stdDeviation="0.5"/>
@@ -83,16 +110,22 @@ fn generate_svg_document(paths: &[String]) -> String {
     </svg>
 </body>
 </html>"#,
+        viewbox_size.0,
+        viewbox_size.1,
         paths.join("\n")
     )
 }
 
 /// Encode data as SVG path animation
-pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
+pub fn encode(data: &[u8], viewbox_size: (u32, u32)) -> Result<Vec<u8>> {
     debug!("Encoding data using SVG path animation steganography");
 
     if data.is_empty() {
-        return Ok(b"<svg viewBox=\"0 0 200 200\"></svg>".to_vec());
+        return Ok(format!(
+            "<svg viewBox=\"0 0 {} {}\"></svg>",
+            viewbox_size.0, viewbox_size.1
+        )
+        .into_bytes());
     }
 
     let paths: Vec<String> = data
@@ -102,7 +135,7 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
         .collect();
 
     info!("Generated SVG path animation with {} paths", paths.len());
-    Ok(generate_svg_document(&paths).into_bytes())
+    Ok(generate_svg_document(&paths, viewbox_size).into_bytes())
 }
 
 /// Decode data from SVG path animation
@@ -145,7 +178,7 @@ mod tests {
     #[test]
     fn test_svg_path() {
         let test_data = b"Hello, SVG Path Steganography!";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(test_data, (800, 600)).unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert_eq!(decoded, test_data);
@@ -154,7 +187,7 @@ mod tests {
     #[test]
     fn test_empty_data() {
         let test_data = b"";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(test_data, (800, 600)).unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert!(decoded.is_empty());
@@ -163,7 +196,7 @@ mod tests {
     #[test]
     fn test_large_data() {
         let test_data: Vec<u8> = (0..2000).map(|i| (i % 256) as u8).collect();
-        let encoded = encode(&test_data).unwrap();
+        let encoded = encode(&test_data, (800, 600)).unwrap();
         let decoded = decode(&encoded).unwrap();
         assert!(!decoded.is_empty());
     }

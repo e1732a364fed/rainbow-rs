@@ -34,8 +34,8 @@ use audio::AudioEncoder;
 
 pub trait Encoder {
     fn name(&self) -> &'static str;
-    fn encode(&self, data: &[u8]) -> Result<String>;
-    fn decode(&self, content: &str) -> Result<Vec<u8>>;
+    fn encode(&self, data: &[u8]) -> Result<Vec<u8>>;
+    fn decode(&self, content: &[u8]) -> Result<Vec<u8>>;
 }
 
 const MIME_TYPES: &[(&str, &[&str])] = &[
@@ -62,35 +62,34 @@ pub fn encode_mime(data: &[u8], mime_type: &str) -> Result<Vec<u8>> {
             // Randomly choose HTML, Prism, or Font encoder
             let choice = rand::thread_rng().gen_range(0..3);
             match choice {
-                0 => html::encode(data),
-                1 => prism::encode(data),
-                _ => font::encode(data),
+                0 => html::HtmlEncoder::default().encode(data),
+                1 => prism::PrismEncoder::default().encode(data),
+                _ => font::FontEncoder::default().encode(data),
             }
         }
         "text/css" => {
             // Randomly choose CSS, Houdini, or Grid encoder
             let choice = rand::thread_rng().gen_range(0..3);
             match choice {
-                0 => css::encode(data),
-                1 => houdini::encode(data),
-                _ => grid::encode(data),
+                0 => css::CssEncoder::default().encode(data),
+                1 => houdini::HoudiniEncoder::default().encode(data),
+                _ => grid::GridEncoder::default().encode(data),
             }
         }
         "application/json" => json::encode(data),
         "application/xml" => {
             // Randomly choose XML or RSS encoder
             if rand::thread_rng().gen_bool(0.5) {
-                xml::encode(data)
+                xml::XmlEncoder::default().encode(data)
             } else {
-                rss::encode(data)
+                rss::RssEncoder::default().encode(data)
             }
         }
         "audio/wav" => {
             let encoder = AudioEncoder::default();
-            let encoded = encoder.encode(data)?;
-            Ok(encoded.into_bytes())
+            encoder.encode(data)
         }
-        "image/svg+xml" => svg_path::encode(data),
+        "image/svg+xml" => svg_path::SvgPathEncoder::default().encode(data),
         _ => {
             warn!("Unsupported MIME type: {}", mime_type);
             Ok(data.to_vec())
@@ -133,8 +132,7 @@ pub fn decode_mime(data: &[u8], mime_type: &str) -> Result<Vec<u8>> {
         }
         "audio/wav" => {
             let encoder = AudioEncoder::default();
-            let content = String::from_utf8(data.to_vec())?;
-            encoder.decode(&content)
+            encoder.decode(data)
         }
         "image/svg+xml" => svg_path::decode(data),
         _ => {

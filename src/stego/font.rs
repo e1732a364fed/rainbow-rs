@@ -18,12 +18,51 @@ Key features:
 - Reversible encoding/decoding
 */
 
+use crate::stego::Encoder;
 use crate::Result;
 use regex::Regex;
 use tracing::{debug, info, warn};
 
+pub struct FontEncoder {
+    page_title: String,
+    font_family: String,
+    heading: String,
+    content: String,
+}
+
+impl Default for FontEncoder {
+    fn default() -> Self {
+        Self {
+            page_title: "Typography Showcase".to_string(),
+            font_family: "Variable".to_string(),
+            heading: "Typography Examples".to_string(),
+            content: "Exploring variable fonts in modern web design.".to_string(),
+        }
+    }
+}
+
+impl Encoder for FontEncoder {
+    fn name(&self) -> &'static str {
+        "font"
+    }
+
+    fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
+        encode(
+            data,
+            &self.page_title,
+            &self.font_family,
+            &self.heading,
+            &self.content,
+        )
+    }
+
+    fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
+        decode(content)
+    }
+}
+
 /// Convert bytes to font variation settings
-fn byte_to_font_variation(byte: u8, index: usize) -> String {
+fn byte_to_font_variation(byte: u8, index: usize, font_family: &str) -> String {
     let weight = (byte / 16) as u32 * 100 + 100; // Weight range 100-1600
     let width = (byte % 16) as u32 * 6; // Width range 0-90
     let slant = (byte % 4) as u32 * 5; // Slant angles: 0, 5, 10, 15 degrees
@@ -31,29 +70,36 @@ fn byte_to_font_variation(byte: u8, index: usize) -> String {
     format!(
         r#".v{} {{
             font-variation-settings: 'wght' {}, 'wdth' {}, 'slnt' {};
-            font-family: 'Variable';
+            font-family: '{}';
         }}"#,
-        index, weight, width, slant
+        index, weight, width, slant, font_family
     )
 }
 
 /// Generate complete HTML document
-fn generate_html_document(variations: &[String], chars: &[String]) -> String {
+fn generate_html_document(
+    variations: &[String],
+    chars: &[String],
+    page_title: &str,
+    font_family: &str,
+    heading: &str,
+    content: &str,
+) -> String {
     format!(
         r#"<!DOCTYPE html>
 <html>
 <head>
-    <title>Typography Showcase</title>
+    <title>{}</title>
     <style>
         @font-face {{
-            font-family: 'Variable';
+            font-family: '{}';
             src: url('data:font/woff2;base64,d09GMgABAAA...') format('woff2');
             font-weight: 100 900;
             font-stretch: 25% 151%;
             font-style: oblique 0deg 15deg;
         }}
         body {{
-            font-family: 'Variable', sans-serif;
+            font-family: '{}', sans-serif;
             line-height: 1.5;
         }}
         span {{
@@ -65,19 +111,30 @@ fn generate_html_document(variations: &[String], chars: &[String]) -> String {
 </head>
 <body>
     <div class="content">
-        <h1>Typography Examples</h1>
+        <h1>{}</h1>
         {}
-        <p>Exploring variable fonts in modern web design.</p>
+        <p>{}</p>
     </div>
 </body>
 </html>"#,
+        page_title,
+        font_family,
+        font_family,
         variations.join("\n        "),
-        chars.join("\n        ")
+        heading,
+        chars.join("\n        "),
+        content
     )
 }
 
 /// Encode data as font variations
-pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
+pub fn encode(
+    data: &[u8],
+    page_title: &str,
+    font_family: &str,
+    heading: &str,
+    content: &str,
+) -> Result<Vec<u8>> {
     debug!("Encoding data using font variation steganography");
 
     if data.is_empty() {
@@ -89,7 +146,7 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
 
     for (i, &byte) in data.iter().enumerate() {
         // Create font variation style
-        variations.push(byte_to_font_variation(byte, i + 1));
+        variations.push(byte_to_font_variation(byte, i + 1, font_family));
 
         // Create character element with class
         chars.push(format!("<span class=\"v{}\">O</span>", i + 1));
@@ -99,7 +156,15 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
         "Generated font variation steganography with {} characters",
         data.len()
     );
-    Ok(generate_html_document(&variations, &chars).into_bytes())
+    Ok(generate_html_document(
+        &variations,
+        &chars,
+        page_title,
+        font_family,
+        heading,
+        content,
+    )
+    .into_bytes())
 }
 
 /// Decode data from font variations
@@ -153,7 +218,14 @@ mod tests {
     #[test]
     fn test_font() {
         let test_data = b"Hello, Font Steganography!";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(
+            test_data,
+            "Test Typography",
+            "TestFont",
+            "Test Examples",
+            "Test content for font variations.",
+        )
+        .unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert_eq!(decoded, test_data);
@@ -162,7 +234,14 @@ mod tests {
     #[test]
     fn test_empty_data() {
         let test_data = b"";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(
+            test_data,
+            "Test Typography",
+            "TestFont",
+            "Test Examples",
+            "Test content for font variations.",
+        )
+        .unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert!(decoded.is_empty());
@@ -171,7 +250,14 @@ mod tests {
     #[test]
     fn test_large_data() {
         let test_data: Vec<u8> = (0..2000).map(|i| (i % 256) as u8).collect();
-        let encoded = encode(&test_data).unwrap();
+        let encoded = encode(
+            &test_data,
+            "Test Typography",
+            "TestFont",
+            "Test Examples",
+            "Test content for font variations.",
+        )
+        .unwrap();
         let decoded = decode(&encoded).unwrap();
         assert!(!decoded.is_empty());
     }
@@ -187,7 +273,7 @@ mod tests {
     #[test]
     fn test_font_variation_encoding() {
         let byte = 123;
-        let variation = byte_to_font_variation(byte, 0);
+        let variation = byte_to_font_variation(byte, 0, "Variable");
         assert!(variation.contains("font-variation-settings"));
         assert!(variation.contains("wght"));
         assert!(variation.contains("wdth"));

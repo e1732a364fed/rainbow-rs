@@ -23,7 +23,34 @@ use chrono::Utc;
 use serde_json::{json, Value};
 use tracing::{debug, info, warn};
 
+use crate::stego::Encoder;
 use crate::Result;
+
+pub struct JsonEncoder {
+    // version: String,
+}
+
+impl Default for JsonEncoder {
+    fn default() -> Self {
+        Self {
+            // version: "1.0".to_string(),
+        }
+    }
+}
+
+impl Encoder for JsonEncoder {
+    fn name(&self) -> &'static str {
+        "json"
+    }
+
+    fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
+        encode(data)
+    }
+
+    fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
+        decode(content)
+    }
+}
 
 /// Encode data into JSON metadata
 pub fn encode(data: &[u8]) -> Result<Vec<u8>> {

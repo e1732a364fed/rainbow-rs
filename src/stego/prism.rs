@@ -24,13 +24,14 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rand::Rng;
 use tracing::{debug, info};
 
+use crate::stego::Encoder;
 use crate::Result;
 
 const MIN_LAYERS: usize = 20;
 const MAX_LAYERS: usize = 250;
 
 /// Encode using nested HTML divs
-pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
+pub fn encode(data: &[u8], page_title: &str) -> Result<Vec<u8>> {
     let encoded = BASE64.encode(data);
     debug!("Encoding {} bytes using Prism steganography", data.len());
 
@@ -38,7 +39,10 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
     let mut html = String::new();
 
     // Add HTML header
-    html.push_str("<!DOCTYPE html>\n<html>\n<head>\n<title>Page Title</title>\n</head>\n<body>\n");
+    html.push_str(&format!(
+        "<!DOCTYPE html>\n<html>\n<head>\n<title>{}</title>\n</head>\n<body>\n",
+        page_title
+    ));
     html.push_str("    <div class=\"container\">\n");
 
     // Create a nested div structure for each character
@@ -67,7 +71,7 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
     // Add HTML footer
     html.push_str("    </div>\n</body>\n</html>\n");
 
-    info!(
+    debug!(
         "Generated Prism steganography with {} nested divs",
         encoded.len()
     );
@@ -134,6 +138,32 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
     }
 }
 
+pub struct PrismEncoder {
+    page_title: String,
+}
+
+impl Default for PrismEncoder {
+    fn default() -> Self {
+        Self {
+            page_title: "Page Title".to_string(),
+        }
+    }
+}
+
+impl Encoder for PrismEncoder {
+    fn name(&self) -> &'static str {
+        "prism"
+    }
+
+    fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
+        encode(data, &self.page_title)
+    }
+
+    fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
+        decode(content)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -141,7 +171,7 @@ mod tests {
     #[test]
     fn test_prism() {
         let test_data = b"Hello, Prism Steganography!";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(test_data, "Test Page").unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert_eq!(decoded, test_data);
@@ -150,7 +180,7 @@ mod tests {
     #[test]
     fn test_empty_data() {
         let test_data = b"";
-        let encoded = encode(test_data).unwrap();
+        let encoded = encode(test_data, "Empty Test").unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
         assert!(decoded.is_empty());
@@ -159,7 +189,7 @@ mod tests {
     #[test]
     fn test_large_data() {
         let test_data: Vec<u8> = (0..2000).map(|i| (i % 256) as u8).collect();
-        let encoded = encode(&test_data).unwrap();
+        let encoded = encode(&test_data, "Large Test").unwrap();
         let decoded = decode(&encoded).unwrap();
         assert!(!decoded.is_empty());
     }
