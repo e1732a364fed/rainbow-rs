@@ -58,6 +58,13 @@ impl LSBEncoder {
         }
     }
 
+    pub fn load_image(&mut self, image_path: PathBuf) -> Result<()> {
+        let img = image::open(image_path)
+            .map_err(|e| RainbowError::Other(format!("Failed to load image: {}", e)))?;
+        self.cover_image = Some(img);
+        Ok(())
+    }
+
     /// 从 self.image_dir 中随机选择一张图片作为 self.cover_image
     fn load_random_image(&mut self) -> Result<()> {
         if let Some(dir) = &self.image_dir {
@@ -85,11 +92,7 @@ impl LSBEncoder {
                 .choose(&mut rand::thread_rng())
                 .ok_or_else(|| RainbowError::Other("Failed to choose random image".to_string()))?;
 
-            let img = image::open(entry.path())
-                .map_err(|e| RainbowError::Other(format!("Failed to load image: {}", e)))?;
-
-            self.cover_image = Some(img);
-            Ok(())
+            self.load_image(entry.path())
         } else {
             Err(RainbowError::Other(
                 "No image directory specified".to_string(),

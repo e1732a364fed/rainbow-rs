@@ -1,16 +1,21 @@
+/*!
+ * This example demonstrates how to use the Rainbow library to encode and decode data using different steganography methods.
+ *
+ * It will encode and decode the data using all the supported steganography methods, and save the results to the `examples/data` directory.
+ */
+
 use rainbow::rainbow::Rainbow;
 use rainbow::{DecodeResult, EncodeOptions, EncodeResult, NetworkSteganographyProcessor};
 use std::fs;
+use tracing::info;
 
-fn do_job(
+fn process(
     is_client: bool,
     rainbow: &Rainbow,
     data: &[u8],
-    encoder: &str,
+    encoder_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("trying is client: {}", is_client);
-
-    let encoder = rainbow.registry.encoders.get(encoder).unwrap();
+    info!("trying is client: {}", is_client);
 
     // 编码数据
     let EncodeResult {
@@ -20,31 +25,32 @@ fn do_job(
         data,
         is_client,
         EncodeOptions {
-            mime_type: Some(encoder.get_mime_type().to_string()),
+            encoder: Some(encoder_name.to_string()),
             ..Default::default()
         },
     )?;
 
-    println!("\nGenerated {} packets", packets.len());
+    info!("\nGenerated {} packets", packets.len());
 
-    // println!("packets: {:?}", String::from_utf8_lossy(&packets[0]));
+    // info!("packets: {:?}", String::from_utf8_lossy(&packets[0]));
 
-    let name = if is_client { "client" } else { "server" };
+    let role = if is_client { "client" } else { "server" };
+
+    let mime_type = rainbow
+        .registry
+        .encoders
+        .get(encoder_name)
+        .unwrap()
+        .get_mime_type();
 
     // 创建输出目录
-    fs::create_dir_all(format!(
-        "examples/data/{}_output/{}",
-        name,
-        encoder.get_mime_type().split('/').last().unwrap()
-    ))?;
+    fs::create_dir_all(format!("examples/data/{}_output/{}", role, encoder_name))?;
 
     // 保存并解码每个数据包
     for (i, (packet, length)) in packets.iter().zip(lengths.iter()).enumerate() {
         let file_path = format!(
             "examples/data/{}_output/{}/packet_{}.http",
-            name,
-            encoder.get_mime_type().split('/').last().unwrap(),
-            i
+            role, encoder_name, i
         );
         fs::write(&file_path, packet)?;
 
@@ -53,14 +59,14 @@ fn do_job(
 
         let file_path = format!(
             "examples/data/{}_output/{}/packet_{}.{}",
-            name,
-            encoder.get_mime_type().split('/').last().unwrap(),
+            role,
+            encoder_name,
             i,
-            rainbow::utils::mime_to_extension(encoder.get_mime_type())
+            rainbow::utils::mime_to_extension(mime_type)
         );
         fs::write(&file_path, body)?;
 
-        println!("Writing packet {} to {}, length: {}", i, file_path, length);
+        info!("Writing packet {} to {}, length: {}", i, file_path, length);
 
         // 解码数据包
         let DecodeResult {
@@ -69,28 +75,15 @@ fn do_job(
             is_read_end,
         } = rainbow.decrypt_single_read(packet.clone(), i, is_client)?;
 
-        println!(
+        info!(
             "Decoded packet {}: length = {}, expected length = {}, is last packet = {}",
             i,
             decoded.len(),
             expected_return_length,
             is_read_end
         );
-        println!("Decoded content: {}\n", String::from_utf8_lossy(&decoded));
+        info!("Decoded content: {}\n", String::from_utf8_lossy(&decoded));
     }
-    Ok(())
-}
-
-fn test_stego(
-    rainbow: &Rainbow,
-    data: &[u8],
-    encoder: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    println!("\nTesting {} steganography:", encoder);
-    println!("Original data: {}", String::from_utf8_lossy(data));
-
-    do_job(true, rainbow, data, encoder)?;
-    do_job(false, rainbow, data, encoder)?;
     Ok(())
 }
 
@@ -112,12 +105,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data = fs::read("res/test.txt")?;
 
     // 测试所有支持的 MIME 类型
-    // let mime_types = rainbow.encoders.get_all_mime_types();
 
-    println!("mime_types: {:?}", rainbow.registry.get_all_mime_types());
+    info!("mime_types: {:?}", rainbow.registry.get_all_mime_types());
 
     for name in rainbow.registry.encoders.keys() {
-        test_stego(&rainbow, &data, name)?;
+        info!("\nTesting {} steganography:", name);
+        info!("Original data: {}", String::from_utf8_lossy(&data));
+
+        process(true, &rainbow, &data, name)?;
+        process(false, &rainbow, &data, name)?;
     }
 
     Ok(())

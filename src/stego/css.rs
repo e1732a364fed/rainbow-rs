@@ -106,7 +106,7 @@ impl Encoder for CssEncoder {
     }
 }
 
-/// Encode data into CSS animation
+/// Encode data into CSS animation. Output is a CSS file.
 pub fn encode(
     data: &[u8],
     page_title: &str,
@@ -117,24 +117,7 @@ pub fn encode(
     delay_zero: &std::ops::Range<f32>,
 ) -> Result<Vec<u8>> {
     if data.is_empty() {
-        return Ok(format!(
-            r#"<!DOCTYPE html>
-<html>
-<head>
-    <title>{}</title>
-    <style>
-        .content {{ font-family: Arial; line-height: 1.6; }}
-    </style>
-</head>
-<body>
-    <div class="content">
-        {}
-    </div>
-</body>
-</html>"#,
-            page_title, content_text
-        )
-        .into_bytes());
+        return Ok(content_text.as_bytes().to_vec());
     }
 
     let mut animations = Vec::new();
@@ -218,22 +201,13 @@ pub fn encode(
 
 /// Decode data from CSS animation
 pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
-    let html = String::from_utf8_lossy(data);
-
-    if html.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // If empty page, return empty data directly
-    if html.contains("Empty Page") {
-        return Ok(Vec::new());
-    }
+    let css = String::from_utf8_lossy(data);
 
     // Extract all animation delay times
     let re = regex::Regex::new(r"animation-delay:\s*([^;]+)").unwrap();
     let mut all_bits = Vec::new();
 
-    for cap in re.captures_iter(&html) {
+    for cap in re.captures_iter(&css) {
         let delays = cap.get(1).unwrap().as_str();
         let times: Vec<&str> = delays.split(',').map(|s| s.trim()).collect();
 

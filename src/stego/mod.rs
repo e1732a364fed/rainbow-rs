@@ -11,7 +11,13 @@
  * - HTML and web-based hiding methods
  * - JSON structure manipulation
  * - RSS feed steganography
+ * - Octet-stream steganography
+ * - Prism steganography
+ * - Houdini steganography
+ * - XML steganography
+ * - LSB steganography
  * - SVG path manipulation
+ * - XML steganography
  */
 
 pub mod audio;

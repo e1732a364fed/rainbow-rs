@@ -560,11 +560,25 @@ impl NetworkSteganographyProcessor for Rainbow {
 
             let o = options.clone();
 
-            let mime = o
-                .mime_type
-                .unwrap_or_else(|| self.registry.get_random_mime_type());
+            let opt_encoder = if let Some(encoder) = o.encoder.as_ref() {
+                self.registry.encoders.get(encoder)
+            } else {
+                None
+            };
 
-            let encoded = self.registry.encode_mime(chunk, &mime)?;
+            let mime = if let Some(mime) = o.mime_type {
+                mime
+            } else if let Some(encoder) = opt_encoder.as_ref() {
+                encoder.get_mime_type().to_string()
+            } else {
+                self.registry.get_random_mime_type()
+            };
+
+            let encoded = if let Some(encoder) = opt_encoder.as_ref() {
+                encoder.encode(chunk)
+            } else {
+                self.registry.encode_mime(chunk, &mime)
+            }?;
 
             debug!("encoded.len: {:?}", encoded.len());
 

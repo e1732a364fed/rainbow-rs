@@ -1,3 +1,5 @@
 This is a test file.
 This file will be encoded into HTTP traffic and then decoded back.
 Let's see how steganography works! 
+
+The flower file is from https://pixahive.com/photo/flower-239/ which is licensed under CC0.
