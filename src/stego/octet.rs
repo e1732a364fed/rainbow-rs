@@ -1,3 +1,9 @@
+/*!
+ * mod octet provides a [`OctetEncoder`] that encrypts and decrypts data using AES-256-GCM or ChaCha20-Poly1305.
+ *
+ *
+ */
+
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
@@ -99,14 +105,17 @@ impl OctetEncoder {
 }
 
 impl Encoder for OctetEncoder {
+    /// octet
     fn name(&self) -> &'static str {
         "octet"
     }
 
+    /// application/octet-stream
     fn get_mime_type(&self) -> &'static str {
         "application/octet-stream"
     }
 
+    /// Encode data using the specified encryption method
     fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
         let mut rng = rand::thread_rng();
 
@@ -148,6 +157,7 @@ impl Encoder for OctetEncoder {
         Ok(output)
     }
 
+    /// Decode data using the specified encryption method
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
         if content.len() < 17 {
             // 1 + 12 + 4 bytes minimum

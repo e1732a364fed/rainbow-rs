@@ -29,8 +29,8 @@ pub enum RainbowError {
     #[error("Decode failed: {0}")]
     DecodeFailed(String),
 
-    #[error("Length mismatch: {0} vs {1}")]
-    LengthMismatch(usize, usize),
+    #[error("Length mismatch: {0} vs {1}, {2}")]
+    LengthMismatch(usize, usize, String),
 
     #[error("HTTP error: {0}")]
     HttpError(String),

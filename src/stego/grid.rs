@@ -42,7 +42,7 @@ impl Random for GridEncoder {
 impl Default for GridEncoder {
     fn default() -> Self {
         Self {
-            container_class: "stego-container".to_string(),
+            container_class: "container".to_string(),
         }
     }
 }

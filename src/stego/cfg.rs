@@ -1,3 +1,9 @@
+/*!
+ * mod cfg provides a [`CFG`] that can be used to generate and decode data using a context-free grammar (CFG).
+ *
+ *
+ */
+
 use std::collections::{BTreeMap, HashMap};
 
 use bytes::{BufMut, BytesMut};
@@ -9,26 +15,21 @@ use crate::{stego::Encoder, RainbowError, Result};
 
 use fake::{faker::company::en::*, faker::name::en::*, Fake};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-
-pub struct Production {
-    text: String,
-
-    product_type: ProductType,
-}
-
-/// 约定： `start` 为起始的 Variable 的名称
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ProductType {
-    Plain,
-    VariableName,
-    Replace,
-}
+/// 约定 production 的起点记为 `{start}`
+pub const START_TAG: &str = "{start}";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CFG {
-    // 因为 需要以固定的顺序遍历变量，所以使用 BTreeMap
-    variables: BTreeMap<String, Vec<Production>>,
+    /// Production 是 CFG 的产生式, 其内容键为变量名，值为该变量的所有可能的产生式
+    ///
+    /// "产生式"要为类似 `"some text  {variable_name} another text"` 的形式
+    ///
+    /// 如果没有大括号，则为 Terminal, 大括号内的内容为变量名
+    ///
+    /// 因为 需要以固定的顺序遍历，所以使用 BTreeMap
+    ///
+    /// 其中起点这里约定 记为 `{start}`
+    production: BTreeMap<String, Vec<String>>,
 }
 
 impl CFG {
@@ -45,7 +46,7 @@ impl CFG {
             let end = find_matching_brace(&result, start).unwrap();
 
             let var_name = &result[start + 1..end];
-            let productions = self.variables.get(var_name).unwrap();
+            let productions = self.production.get(var_name).unwrap();
 
             let production = if let Some(choice_map) = choices {
                 let index = choice_map.get(var_name).unwrap_or(&0);
@@ -54,14 +55,14 @@ impl CFG {
                 &productions[0]
             };
 
-            result.replace_range(start..=end, &production.text);
+            result.replace_range(start..=end, production);
         }
         result
     }
 
-    /// 尝试单个选择组合是否能生成目标文本
-    fn match_choices(&self, target_text: &str, choices: &HashMap<String, usize>) -> bool {
-        self.expand("{start}", Some(choices)) == target_text
+    /// 尝试该选择组合是否能生成目标文本
+    pub fn match_choices(&self, target_text: &str, choices: &HashMap<String, usize>) -> bool {
+        self.expand(START_TAG, Some(choices)) == target_text
     }
 
     /// 生成所有可能的选择组合
@@ -69,7 +70,7 @@ impl CFG {
         let mut all_choices = vec![HashMap::new()];
 
         // 对每个变量
-        for (var_name, productions) in &self.variables {
+        for (var_name, productions) in &self.production {
             let mut new_choices = Vec::new();
 
             // 对现有的每个选择组合
@@ -88,7 +89,7 @@ impl CFG {
         all_choices
     }
 
-    /// 由目标文本反推选择组合
+    /// 由目标文本反推选择组合, 通过尝试每个选择组合的方式。
     ///
     /// bad performance
     pub fn reverse_by_try_all(&self, target_text: &str) -> Option<HashMap<String, usize>> {
@@ -101,21 +102,22 @@ impl CFG {
             .find(|choices| self.match_choices(target_text, choices))
     }
 
-    /// 由目标文本反推选择组合
+    /// 由目标文本反推选择组合，通过递归剪枝的方式。
     ///
     /// good performance
     pub fn reverse(&self, target_text: &str) -> Option<HashMap<String, usize>> {
         let mut choices = HashMap::new();
-        if self.match_recursive(target_text, "{start}", &mut choices, false) {
+        if self.match_recursive(target_text, START_TAG, &mut choices, false) {
             Some(choices)
         } else {
             None
         }
     }
 
+    /// 类似reverse， target_text 会以 所返回的选择组合 所 expand 后的结果为开头
     pub fn reverse_by_start_with(&self, target_text: &str) -> Option<HashMap<String, usize>> {
         let mut choices = HashMap::new();
-        if self.match_recursive(target_text, "{start}", &mut choices, true) {
+        if self.match_recursive(target_text, START_TAG, &mut choices, true) {
             Some(choices)
         } else {
             None
@@ -127,11 +129,11 @@ impl CFG {
         target: &str,
         pattern: &str,
         choices: &mut HashMap<String, usize>,
-        use_start_with: bool,
+        by_start_with: bool,
     ) -> bool {
         match pattern.find("{") {
             None => {
-                if use_start_with {
+                if by_start_with {
                     target.starts_with(pattern)
                 } else {
                     target == pattern
@@ -141,17 +143,13 @@ impl CFG {
                 let end = find_matching_brace(pattern, start).unwrap();
                 let var_name = &pattern[start + 1..end];
 
-                // println!("match_recursive: var_name: {}", var_name);
-
-                if let Some(productions) = self.variables.get(var_name) {
+                if let Some(productions) = self.production.get(var_name) {
                     for (index, production) in productions.iter().enumerate() {
                         choices.insert(var_name.to_string(), index);
 
                         let mut new_pattern = pattern.to_string();
 
-                        // println!("new_pattern before: {}", new_pattern);
-                        new_pattern.replace_range(start..=end, &production.text);
-                        // println!("new_pattern after: {}", new_pattern);
+                        new_pattern.replace_range(start..=end, production);
 
                         if let Some(bracket_start) = new_pattern.find('{') {
                             if bracket_start != 0
@@ -161,7 +159,7 @@ impl CFG {
                             }
                         }
 
-                        if self.match_recursive(target, &new_pattern, choices, use_start_with) {
+                        if self.match_recursive(target, &new_pattern, choices, by_start_with) {
                             return true;
                         }
 
@@ -174,14 +172,14 @@ impl CFG {
         }
     }
 
-    /// 将选择映射转换回原始字节数据
+    /// 将选择映射转换成字节数据
     pub fn choices_to_bytes(&self, choices: &HashMap<String, usize>) -> Vec<u8> {
         let mut result = Vec::new();
         let mut current_byte = 0u8;
         let mut bits_in_current_byte = 0;
 
         // 对每个变量
-        for (var_name, productions) in &self.variables {
+        for (var_name, productions) in &self.production {
             let num_productions = productions.len();
             if num_productions <= 1 {
                 continue;
@@ -221,7 +219,7 @@ impl CFG {
 
     // 添加一个新的辅助方法来计算单个句子的容量
     pub fn bits_capacity(&self) -> usize {
-        self.variables
+        self.production
             .values()
             .map(|productions| {
                 let num_productions = productions.len();
@@ -255,56 +253,23 @@ const VERBS: [&str; 16] = [
 ];
 
 impl CFG {
-    /// capacity: 4
-    pub fn cfg_example1() -> CFG {
+    /// capacity: 4 bits
+    pub fn example1() -> CFG {
         let vp = vec![
-            Production {
-                text: "went ﬁshing {where}".to_string(),
-                product_type: ProductType::Replace,
-            },
-            Production {
-                text: "went bowling {where}".to_string(),
-                product_type: ProductType::Replace,
-            },
+            "went ﬁshing {where}".to_string(),
+            "went bowling {where}".to_string(),
         ];
 
         let wp = vec![
-            Production {
-                text: "in {direction} Iowa.".to_string(),
-                product_type: ProductType::Replace,
-            },
-            Production {
-                text: "in {direction} Minnesota.".to_string(),
-                product_type: ProductType::Replace,
-            },
+            "in {direction} Iowa.".to_string(),
+            "in {direction} Minnesota.".to_string(),
         ];
 
-        let dp = vec![
-            Production {
-                text: "northern".to_string(),
-                product_type: ProductType::Plain,
-            },
-            Production {
-                text: "southern".to_string(),
-                product_type: ProductType::Plain,
-            },
-        ];
+        let dp = vec!["northern".to_string(), "southern".to_string()];
 
-        let np = vec![
-            Production {
-                text: "Fred".to_string(),
-                product_type: ProductType::Plain,
-            },
-            Production {
-                text: "Barney".to_string(),
-                product_type: ProductType::Plain,
-            },
-        ];
+        let np = vec!["Fred".to_string(), "Barney".to_string()];
 
-        let start = vec![Production {
-            text: "{noun} {verb}".to_string(),
-            product_type: ProductType::Replace,
-        }];
+        let start = vec!["{noun} {verb}".to_string()];
 
         let variables = b_tree_map! {
             "start".to_owned() =>  start  ,
@@ -315,24 +280,21 @@ impl CFG {
         };
 
         // Create CFG instance
-        let cfg = CFG { variables };
+        let cfg = CFG {
+            production: variables,
+        };
 
         println!("capacity: {}", cfg.bits_capacity());
 
         cfg
     }
 
-    /// capacity: 32
-    pub fn cfg_example2() -> CFG {
-        let start = vec![Production {
-            text: "{SUBJECT_VERB_OBJECT}\n{DATELINE}\n{CONTENT}\n{QUOTE_INTRO} {QUOTE}".to_string(),
-            product_type: ProductType::Replace,
-        }];
+    /// capacity: 32 bits
+    pub fn example2() -> CFG {
+        let start =
+            vec!["{SUBJECT_VERB_OBJECT}\n{DATELINE}\n{CONTENT}\n{QUOTE_INTRO} {QUOTE}".to_string()];
 
-        let svb = vec![Production {
-            text: "{SUBJECT} {VERB} {OBJECT}".to_string(),
-            product_type: ProductType::Replace,
-        }];
+        let svb = vec!["{SUBJECT} {VERB} {OBJECT}".to_string()];
 
         // 主语
         const SUBJECTS: [&str; 32] = [
@@ -491,7 +453,9 @@ impl CFG {
         };
 
         // Create CFG instance
-        let cfg = CFG { variables };
+        let cfg = CFG {
+            production: variables,
+        };
 
         println!("capacity: {}", cfg.bits_capacity());
 
@@ -503,17 +467,11 @@ impl CFG {
 use super::Random;
 
 impl Random for CFG {
-    /// capacity: 32
+    /// capacity: 32 bits
     fn random() -> Self {
-        let start = vec![Production {
-            text: "{HEADLINE}\n{DATELINE}\n{CONTENT}\n{QUOTE_INTRO} {QUOTE}".to_string(),
-            product_type: ProductType::Replace,
-        }];
+        let start = vec!["{HEADLINE}\n{DATELINE}\n{CONTENT}\n{QUOTE_INTRO} {QUOTE}".to_string()];
 
-        let headline = vec![Production {
-            text: "{SUBJECT} {VERB} {OBJECT}".to_string(),
-            product_type: ProductType::Replace,
-        }];
+        let headline = vec!["{SUBJECT} {VERB} {OBJECT}".to_string()];
 
         // 生成随机主语 (32)
         let subjects: Vec<String> = (0..8)
@@ -685,7 +643,9 @@ impl Random for CFG {
             "DATELINE".to_owned() => init_plain_by_list(&["{DATE} {CITY}"]),
         };
 
-        let cfg = CFG { variables };
+        let cfg = CFG {
+            production: variables,
+        };
         assert_eq!(
             cfg.bits_capacity(),
             32,
@@ -704,7 +664,7 @@ pub struct CFGEncoder {
 impl Default for CFGEncoder {
     fn default() -> Self {
         Self {
-            cfg: CFG::cfg_example2(),
+            cfg: CFG::example2(),
         }
     }
 }
@@ -714,8 +674,6 @@ impl Random for CFGEncoder {
         Self { cfg: CFG::random() }
     }
 }
-
-// impl CFGEncoder {}
 
 impl Encoder for CFGEncoder {
     fn name(&self) -> &'static str {
@@ -760,24 +718,19 @@ impl Encoder for CFGEncoder {
             let mut choices = HashMap::new();
 
             // 为当前句子编码数据
-            for (var_name, productions) in &self.cfg.variables {
-                // println!("var_name: {}", var_name);
-
+            for (var_name, productions) in &self.cfg.production {
                 let num_productions = productions.len();
                 if num_productions <= 1 {
-                    // println!("continue here, num_productions <= 1");
                     continue;
                 }
 
                 let bits_per_var = (num_productions as f64).log2().floor() as u8;
                 if bits_per_var == 0 {
-                    // println!("continue here, bits_per_var == 0");
                     continue;
                 }
 
                 // 检查是否还有足够的数据需要编码
                 if current_byte_index >= data_len {
-                    // println!("break here, current_byte_index >= data_len");
                     break;
                 }
 
@@ -803,12 +756,11 @@ impl Encoder for CFGEncoder {
 
                 value %= num_productions as u8;
 
-                // println!("insert var_name: {}, value: {}", var_name, value);
                 choices.insert(var_name.clone(), value as usize);
             }
 
             // 生成当前句子
-            let sentence = self.cfg.expand("{start}", Some(&choices));
+            let sentence = self.cfg.expand(START_TAG, Some(&choices));
 
             // 添加分隔符（如果不是第一个句子）
             if !result.is_empty() {
@@ -837,7 +789,6 @@ impl Encoder for CFGEncoder {
 
         // 处理每个完整的字节
         let mut remaining_text = cs.as_ref();
-        // println!("remaining_text {:#?}", remaining_text);
         while !remaining_text.is_empty() {
             remaining_text = remaining_text.trim_start();
 
@@ -845,10 +796,9 @@ impl Encoder for CFGEncoder {
                 self.cfg
                     .reverse_by_start_with(remaining_text)
                     .ok_or(RainbowError::InvalidData(
-                        "reverse_by_start_with failed".to_string(),
+                        "reverse_by_start_with got None".to_string(),
                     ))?;
 
-            // println!("choices {:#?}", choices);
             let bytes = self.cfg.choices_to_bytes(&choices);
 
             if capacity < 8 {
@@ -872,7 +822,7 @@ impl Encoder for CFGEncoder {
                 result.extend_from_slice(&bytes);
             }
 
-            let expanded = self.cfg.expand("{start}", Some(&choices));
+            let expanded = self.cfg.expand(START_TAG, Some(&choices));
             remaining_text = &remaining_text[expanded.len()..];
         }
 
@@ -888,21 +838,22 @@ impl Encoder for CFGEncoder {
             4
         };
 
-        let result = &result[start_at..start_at + data_length];
+        if result.len() < start_at + data_length {
+            return Err(RainbowError::LengthMismatch(
+                result.len(),
+                start_at + data_length,
+                "result.len() < start_at + data_length".to_string(),
+            ));
+        }
 
-        assert_eq!(result.len(), data_length);
+        let result = &result[start_at..start_at + data_length];
 
         Ok(result.to_vec())
     }
 }
 
-pub fn init_plain_by_list(list: &[&str]) -> Vec<Production> {
-    list.iter()
-        .map(|t| Production {
-            text: t.to_string(),
-            product_type: ProductType::Plain,
-        })
-        .collect()
+pub fn init_plain_by_list(list: &[&str]) -> Vec<String> {
+    list.iter().map(|t| t.to_string()).collect()
 }
 
 use common_macros::b_tree_map;
@@ -910,18 +861,19 @@ use common_macros::b_tree_map;
 #[cfg(test)]
 mod test {
     use super::CFGEncoder;
-    use crate::stego::{cfg::CFG, Encoder, Random};
+    use crate::stego::{
+        cfg::{CFG, START_TAG},
+        Encoder, Random,
+    };
     use common_macros::hash_map;
     use rand::Rng;
 
     #[test]
     fn test() {
-        // let terminals = HashMap::
-
-        let cfg = CFG::cfg_example1();
+        let cfg = CFG::example1();
 
         // Test case 1: No choices (default behavior)
-        let result = cfg.expand("{start}", None);
+        let result = cfg.expand(START_TAG, None);
         assert_eq!(result, "Fred went ﬁshing in northern Iowa.");
 
         // Test case 2: All choices specified
@@ -931,7 +883,7 @@ mod test {
             "where".to_owned() => 1,     // Choose "in {direction} Minnesota"
             "direction".to_owned() => 1,  // Choose "southern"
         };
-        let result1 = cfg.expand("{start}", Some(&choices1));
+        let result1 = cfg.expand(START_TAG, Some(&choices1));
         assert_eq!(result1, "Barney went bowling in southern Minnesota.");
 
         // Test case 3: Partial choices (missing some variables)
@@ -940,7 +892,7 @@ mod test {
             "verb".to_owned() => 1,      // Choose "went bowling"
             // "where" and "direction" not specified, should use default (index 0)
         };
-        let result2 = cfg.expand("{start}", Some(&choices2));
+        let result2 = cfg.expand(START_TAG, Some(&choices2));
         assert_eq!(result2, "Barney went bowling in northern Iowa.");
 
         // Test case 4: Different combination of choices
@@ -950,13 +902,13 @@ mod test {
             "where".to_owned() => 1,     // Choose "in {direction} Minnesota"
             "direction".to_owned() => 0,  // Choose "northern"
         };
-        let result3 = cfg.expand("{start}", Some(&choices3));
+        let result3 = cfg.expand(START_TAG, Some(&choices3));
         assert_eq!(result3, "Fred went bowling in northern Minnesota.");
     }
 
     #[test]
     fn test_reverse() {
-        let cfg = CFG::cfg_example1();
+        let cfg = CFG::example1();
 
         println!("all choices {:#?}", cfg.generate_all_choices());
 
@@ -971,7 +923,7 @@ mod test {
         assert_eq!(*choices.get("direction").unwrap(), 0);
 
         // 验证反向结果
-        let expanded = cfg.expand("{start}", Some(&choices));
+        let expanded = cfg.expand(START_TAG, Some(&choices));
         assert_eq!(expanded, text);
 
         // Test case 2: Different combination
@@ -985,7 +937,7 @@ mod test {
         assert_eq!(*choices2.get("direction").unwrap(), 1);
 
         // 验证反向结果
-        let expanded2 = cfg.expand("{start}", Some(&choices2));
+        let expanded2 = cfg.expand(START_TAG, Some(&choices2));
         assert_eq!(expanded2, text2);
 
         // Test case 3: Invalid text should return None
@@ -995,7 +947,7 @@ mod test {
 
     #[test]
     fn test_reverse_optimized() {
-        let cfg = CFG::cfg_example1();
+        let cfg = CFG::example1();
 
         // 测试用例1：基本匹配
         let text1 = "Fred went ﬁshing in northern Iowa.";
@@ -1010,7 +962,7 @@ mod test {
         println!("choices 1 basic ok, {:#?}", choices1);
 
         // 验证展开结果
-        let expanded1 = cfg.expand("{start}", Some(&choices1));
+        let expanded1 = cfg.expand(START_TAG, Some(&choices1));
         assert_eq!(expanded1, text1);
 
         // 测试用例2：所有变量都选择第二个选项
@@ -1026,7 +978,7 @@ mod test {
         println!("choices 2 all ok, {:#?}", choices2);
 
         // 验证展开结果
-        let expanded2 = cfg.expand("{start}", Some(&choices2));
+        let expanded2 = cfg.expand(START_TAG, Some(&choices2));
         assert_eq!(expanded2, text2);
 
         // 测试用例3：混合选择
@@ -1042,7 +994,7 @@ mod test {
         println!("choices 3 mixed ok, {:#?}", choices3);
 
         // 验证展开结果
-        let expanded3 = cfg.expand("{start}", Some(&choices3));
+        let expanded3 = cfg.expand(START_TAG, Some(&choices3));
         assert_eq!(expanded3, text3);
 
         // 测试用例4：无效输入
@@ -1062,13 +1014,13 @@ mod test {
 
     #[test]
     fn test_encode_decode1() {
-        let cfg = CFG::cfg_example1();
+        let cfg = CFG::example1();
         test_encode_decode_for_cfg(cfg);
     }
 
     #[test]
     fn test2() {
-        let cfg = CFG::cfg_example2();
+        let cfg = CFG::example2();
         test_encode_decode_for_cfg(cfg);
     }
 
@@ -1080,13 +1032,13 @@ mod test {
 
     #[test]
     fn test_encode_decode_large1() {
-        let cfg = CFG::cfg_example1();
+        let cfg = CFG::example1();
         test_encode_decode_large_for_cfg(cfg);
     }
 
     #[test]
     fn test_encode_decode_large2() {
-        let cfg = CFG::cfg_example2();
+        let cfg = CFG::example2();
         test_encode_decode_large_for_cfg(cfg);
     }
 
@@ -1186,12 +1138,12 @@ mod test {
 
     #[test]
     fn test_encoder_capacity() {
-        let cfg = CFG::cfg_example1();
+        let cfg = CFG::example1();
         let encoder = CFGEncoder { cfg };
 
         // Calculate theoretical capacity
         let mut total_bits = 0;
-        for productions in encoder.cfg.variables.values() {
+        for productions in encoder.cfg.production.values() {
             let num_productions = productions.len();
             if num_productions > 1 {
                 let bits = (num_productions as f64).log2().floor() as u32;
@@ -1212,7 +1164,7 @@ mod test {
 
     #[test]
     fn test_encode_decode_utf8() {
-        let cfg = CFG::cfg_example1();
+        let cfg = CFG::example1();
         let encoder = CFGEncoder { cfg };
 
         // Test with data that contains UTF-8 characters when encoded
@@ -1228,7 +1180,7 @@ mod test {
 
     #[test]
     fn test_invalid_decode() {
-        let cfg = CFG::cfg_example1();
+        let cfg = CFG::example1();
         let encoder = CFGEncoder { cfg };
 
         // Test case 1: Invalid UTF-8 sequence

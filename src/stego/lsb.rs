@@ -1,3 +1,9 @@
+/*!
+ * mod lsb provides a [`LSBEncoder`] that can be used to encode and decode data using LSB steganography.
+ *
+ *
+ */
+
 use crate::{RainbowError, Result};
 use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba};
 use rand::seq::SliceRandom;
@@ -5,12 +11,26 @@ use std::{fs, path::PathBuf};
 
 use super::{Encoder, Random};
 
+fn create_random_image(width: u32, height: u32) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+    let mut img = ImageBuffer::new(width, height);
+    for pixel in img.pixels_mut() {
+        *pixel = Rgba([
+            rand::random::<u8>(),
+            rand::random::<u8>(),
+            rand::random::<u8>(),
+            255,
+        ]);
+    }
+    img
+}
+
+/// 默认 image_dir 为空。如果为空时调用 encode, 则会生成一个随机图片后再使用
 #[derive(Debug, Clone)]
 pub struct LSBEncoder {
     // LSB bits to use (1-8)
     lsb_bits: u8,
     // Directory containing cover images
-    image_dir: Option<PathBuf>,
+    pub image_dir: Option<PathBuf>,
     // Current cover image
     cover_image: Option<DynamicImage>,
 }
@@ -38,6 +58,7 @@ impl LSBEncoder {
         }
     }
 
+    /// 从 self.image_dir 中随机选择一张图片作为 self.cover_image
     fn load_random_image(&mut self) -> Result<()> {
         if let Some(dir) = &self.image_dir {
             let entries: Vec<_> = fs::read_dir(dir)
@@ -74,19 +95,6 @@ impl LSBEncoder {
                 "No image directory specified".to_string(),
             ))
         }
-    }
-
-    fn create_random_image(&self, width: u32, height: u32) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
-        let mut img = ImageBuffer::new(width, height);
-        for pixel in img.pixels_mut() {
-            *pixel = Rgba([
-                rand::random::<u8>(),
-                rand::random::<u8>(),
-                rand::random::<u8>(),
-                255,
-            ]);
-        }
-        img
     }
 }
 
@@ -153,17 +161,17 @@ impl Encoder for LSBEncoder {
             let width = (min_pixels as f64).sqrt().ceil() as u32;
             // Add a bit extra to height to ensure we have enough pixels
             let height = ((min_pixels as f64) / width as f64).ceil() as u32 + 2;
-            self.create_random_image(width, height)
+            create_random_image(width, height)
         };
 
         let mut img = img.clone();
 
         // Embed data length first (32 bits)
         let len_bytes = (data_len as u32).to_le_bytes();
-        self.embed_bytes(&mut img, &len_bytes, 0)?;
+        embed_bytes(self.lsb_bits, &mut img, &len_bytes, 0)?;
 
         // Embed actual data
-        self.embed_bytes(&mut img, data, 32)?;
+        embed_bytes(self.lsb_bits, &mut img, data, 32)?;
 
         // Convert to PNG
         let mut buffer = Vec::new();
@@ -179,257 +187,253 @@ impl Encoder for LSBEncoder {
             .map_err(|e| RainbowError::Other(format!("Failed to load image: {}", e)))?;
 
         // Extract data length first (32 bits)
-        let len_bytes = self.extract_bytes(&img, 0, 4)?;
+        let len_bytes = extract_bytes(self.lsb_bits, &img, 0, 4)?;
         let data_len = u32::from_le_bytes(len_bytes.try_into().unwrap()) as usize;
 
         // Extract actual data
-        self.extract_bytes(&img, 32, data_len)
+        extract_bytes(self.lsb_bits, &img, 32, data_len)
     }
 }
 
-impl LSBEncoder {
-    fn embed_bytes(
-        &self,
-        img: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
-        data: &[u8],
-        start_bit: usize,
-    ) -> Result<()> {
-        let bits_per_pixel = self.lsb_bits as usize * 3;
+pub fn embed_bytes(
+    lsb_bits: u8,
+    img: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
+    data: &[u8],
+    start_bit: usize,
+) -> Result<()> {
+    let bits_per_pixel = lsb_bits as usize * 3;
 
-        for (byte_idx, &byte) in data.iter().enumerate() {
-            let start_pixel = (start_bit + byte_idx * 8) / bits_per_pixel;
-            let bit_offset = (start_bit + byte_idx * 8) % bits_per_pixel;
-            let channel_start = bit_offset / self.lsb_bits as usize;
-            let bit_offset_in_channel = bit_offset % self.lsb_bits as usize;
+    for (byte_idx, &byte) in data.iter().enumerate() {
+        let start_pixel = (start_bit + byte_idx * 8) / bits_per_pixel;
+        let bit_offset = (start_bit + byte_idx * 8) % bits_per_pixel;
+        let channel_start = bit_offset / lsb_bits as usize;
+        let bit_offset_in_channel = bit_offset % lsb_bits as usize;
 
-            let x = (start_pixel as u32) % img.width();
-            let y = (start_pixel as u32) / img.width();
+        let x = (start_pixel as u32) % img.width();
+        let y = (start_pixel as u32) / img.width();
 
-            if y >= img.height() {
-                return Err(RainbowError::Other(format!(
-                    "Image too small to store data: need y {}, have {}",
-                    y,
-                    img.height()
-                )));
+        if y >= img.height() {
+            return Err(RainbowError::Other(format!(
+                "Image too small to store data: need y {}, have {}",
+                y,
+                img.height()
+            )));
+        }
+
+        if lsb_bits == 1 {
+            // Special handling for 1-bit LSB
+            let mut bits_left = 8;
+            let mut current_byte = byte;
+            let mut current_pixel = start_pixel;
+            let mut current_channel = channel_start;
+
+            while bits_left > 0 {
+                let x = (current_pixel as u32) % img.width();
+                let y = (current_pixel as u32) / img.width();
+
+                if y >= img.height() {
+                    return Err(RainbowError::Other(format!(
+                        "Image too small to store data: need y {}, have {}",
+                        y,
+                        img.height()
+                    )));
+                }
+
+                let pixel = img.get_pixel_mut(x, y);
+
+                while current_channel < 3 && bits_left > 0 {
+                    // Clear LSB
+                    pixel[current_channel] &= !1;
+                    // Set LSB to current bit
+                    pixel[current_channel] |= (current_byte >> 7) & 1;
+                    current_byte = current_byte.wrapping_shl(1);
+                    bits_left -= 1;
+                    current_channel += 1;
+                }
+
+                if bits_left > 0 {
+                    current_pixel += 1;
+                    current_channel = 0;
+                }
+            }
+        } else {
+            let pixel = img.get_pixel_mut(x, y);
+            let current_byte = byte;
+            let mut bits_written = 0;
+            let mut current_channel = channel_start;
+            let mut current_offset = bit_offset_in_channel;
+
+            while bits_written < 8 && current_channel < 3 {
+                let available_bits = lsb_bits as usize - current_offset;
+                let bits_to_write = std::cmp::min(available_bits, 8 - bits_written);
+                let channel_mask = ((1 << bits_to_write) - 1) as u8;
+
+                // Clear the target bits in the channel
+                pixel[current_channel] &= !(channel_mask << current_offset);
+                // Write the bits from the current byte
+                let bits = ((current_byte >> (8 - bits_to_write - bits_written)) & channel_mask)
+                    << current_offset;
+                pixel[current_channel] |= bits;
+
+                bits_written += bits_to_write;
+                current_channel += 1;
+                current_offset = 0;
             }
 
-            if self.lsb_bits == 1 {
-                // Special handling for 1-bit LSB
-                let mut bits_left = 8;
-                let mut current_byte = byte;
-                let mut current_pixel = start_pixel;
-                let mut current_channel = channel_start;
+            // If we still have remaining bits, write them to the next pixel
+            if bits_written < 8 {
+                let next_pixel = start_pixel + 1;
+                let x = (next_pixel as u32) % img.width();
+                let y = (next_pixel as u32) / img.width();
 
-                while bits_left > 0 {
-                    let x = (current_pixel as u32) % img.width();
-                    let y = (current_pixel as u32) / img.width();
-
-                    if y >= img.height() {
-                        return Err(RainbowError::Other(format!(
-                            "Image too small to store data: need y {}, have {}",
-                            y,
-                            img.height()
-                        )));
-                    }
-
-                    let pixel = img.get_pixel_mut(x, y);
-
-                    while current_channel < 3 && bits_left > 0 {
-                        // Clear LSB
-                        pixel[current_channel] &= !1;
-                        // Set LSB to current bit
-                        pixel[current_channel] |= (current_byte >> 7) & 1;
-                        current_byte = current_byte.wrapping_shl(1);
-                        bits_left -= 1;
-                        current_channel += 1;
-                    }
-
-                    if bits_left > 0 {
-                        current_pixel += 1;
-                        current_channel = 0;
-                    }
+                if y >= img.height() {
+                    return Err(RainbowError::Other(format!(
+                        "Image too small to store data: need y {}, have {}",
+                        y,
+                        img.height()
+                    )));
                 }
-            } else {
-                let pixel = img.get_pixel_mut(x, y);
-                let current_byte = byte;
-                let mut bits_written = 0;
-                let mut current_channel = channel_start;
-                let mut current_offset = bit_offset_in_channel;
+
+                let next_pixel = img.get_pixel_mut(x, y);
+                current_channel = 0;
 
                 while bits_written < 8 && current_channel < 3 {
-                    let available_bits = self.lsb_bits as usize - current_offset;
-                    let bits_to_write = std::cmp::min(available_bits, 8 - bits_written);
+                    let bits_to_write = std::cmp::min(lsb_bits as usize, 8 - bits_written);
                     let channel_mask = ((1 << bits_to_write) - 1) as u8;
 
-                    // Clear the target bits in the channel
-                    pixel[current_channel] &= !(channel_mask << current_offset);
+                    // Clear the LSB bits in the channel
+                    next_pixel[current_channel] &= !channel_mask;
                     // Write the bits from the current byte
-                    let bits = ((current_byte >> (8 - bits_to_write - bits_written))
-                        & channel_mask)
-                        << current_offset;
-                    pixel[current_channel] |= bits;
+                    let bits = (current_byte >> (8 - bits_to_write - bits_written)) & channel_mask;
+                    next_pixel[current_channel] |= bits;
 
                     bits_written += bits_to_write;
                     current_channel += 1;
-                    current_offset = 0;
-                }
-
-                // If we still have remaining bits, write them to the next pixel
-                if bits_written < 8 {
-                    let next_pixel = start_pixel + 1;
-                    let x = (next_pixel as u32) % img.width();
-                    let y = (next_pixel as u32) / img.width();
-
-                    if y >= img.height() {
-                        return Err(RainbowError::Other(format!(
-                            "Image too small to store data: need y {}, have {}",
-                            y,
-                            img.height()
-                        )));
-                    }
-
-                    let next_pixel = img.get_pixel_mut(x, y);
-                    current_channel = 0;
-
-                    while bits_written < 8 && current_channel < 3 {
-                        let bits_to_write = std::cmp::min(self.lsb_bits as usize, 8 - bits_written);
-                        let channel_mask = ((1 << bits_to_write) - 1) as u8;
-
-                        // Clear the LSB bits in the channel
-                        next_pixel[current_channel] &= !channel_mask;
-                        // Write the bits from the current byte
-                        let bits =
-                            (current_byte >> (8 - bits_to_write - bits_written)) & channel_mask;
-                        next_pixel[current_channel] |= bits;
-
-                        bits_written += bits_to_write;
-                        current_channel += 1;
-                    }
                 }
             }
         }
-
-        Ok(())
     }
 
-    fn extract_bytes(
-        &self,
-        img: &DynamicImage,
-        start_bit: usize,
-        length: usize,
-    ) -> Result<Vec<u8>> {
-        let bits_per_pixel = self.lsb_bits as usize * 3;
-        let mut result = Vec::with_capacity(length);
+    Ok(())
+}
 
-        for byte_idx in 0..length {
-            let start_pixel = (start_bit + byte_idx * 8) / bits_per_pixel;
-            let bit_offset = (start_bit + byte_idx * 8) % bits_per_pixel;
-            let channel_start = bit_offset / self.lsb_bits as usize;
-            let bit_offset_in_channel = bit_offset % self.lsb_bits as usize;
+pub fn extract_bytes(
+    lsb_bits: u8,
+    img: &DynamicImage,
+    start_bit: usize,
+    length: usize,
+) -> Result<Vec<u8>> {
+    let bits_per_pixel = lsb_bits as usize * 3;
+    let mut result = Vec::with_capacity(length);
 
-            let x = (start_pixel as u32) % img.width();
-            let y = (start_pixel as u32) / img.width();
+    for byte_idx in 0..length {
+        let start_pixel = (start_bit + byte_idx * 8) / bits_per_pixel;
+        let bit_offset = (start_bit + byte_idx * 8) % bits_per_pixel;
+        let channel_start = bit_offset / lsb_bits as usize;
+        let bit_offset_in_channel = bit_offset % lsb_bits as usize;
 
-            if y >= img.height() {
-                return Err(RainbowError::Other(format!(
-                    "Image too small to extract data: need y {}, have {}",
-                    y,
-                    img.height()
-                )));
-            }
+        let x = (start_pixel as u32) % img.width();
+        let y = (start_pixel as u32) / img.width();
 
-            if self.lsb_bits == 1 {
-                // Special handling for 1-bit LSB
-                let mut byte = 0u8;
-                let mut bits_read = 0;
-                let mut current_pixel = start_pixel;
-                let mut current_channel = channel_start;
+        if y >= img.height() {
+            return Err(RainbowError::Other(format!(
+                "Image too small to extract data: need y {}, have {}",
+                y,
+                img.height()
+            )));
+        }
 
-                while bits_read < 8 {
-                    let x = (current_pixel as u32) % img.width();
-                    let y = (current_pixel as u32) / img.width();
+        if lsb_bits == 1 {
+            // Special handling for 1-bit LSB
+            let mut byte = 0u8;
+            let mut bits_read = 0;
+            let mut current_pixel = start_pixel;
+            let mut current_channel = channel_start;
 
-                    if y >= img.height() {
-                        return Err(RainbowError::Other(format!(
-                            "Image too small to extract data: need y {}, have {}",
-                            y,
-                            img.height()
-                        )));
-                    }
+            while bits_read < 8 {
+                let x = (current_pixel as u32) % img.width();
+                let y = (current_pixel as u32) / img.width();
 
-                    let pixel = img.get_pixel(x, y);
-
-                    while current_channel < 3 && bits_read < 8 {
-                        // Get LSB and shift it to the right position
-                        byte |= (pixel[current_channel] & 1) << (7 - bits_read);
-                        bits_read += 1;
-                        current_channel += 1;
-                    }
-
-                    if bits_read < 8 {
-                        current_pixel += 1;
-                        current_channel = 0;
-                    }
+                if y >= img.height() {
+                    return Err(RainbowError::Other(format!(
+                        "Image too small to extract data: need y {}, have {}",
+                        y,
+                        img.height()
+                    )));
                 }
 
-                result.push(byte);
-            } else {
                 let pixel = img.get_pixel(x, y);
-                let mut byte = 0u8;
-                let mut bits_read = 0;
-                let mut current_channel = channel_start;
-                let mut current_offset = bit_offset_in_channel;
+
+                while current_channel < 3 && bits_read < 8 {
+                    // Get LSB and shift it to the right position
+                    byte |= (pixel[current_channel] & 1) << (7 - bits_read);
+                    bits_read += 1;
+                    current_channel += 1;
+                }
+
+                if bits_read < 8 {
+                    current_pixel += 1;
+                    current_channel = 0;
+                }
+            }
+
+            result.push(byte);
+        } else {
+            let pixel = img.get_pixel(x, y);
+            let mut byte = 0u8;
+            let mut bits_read = 0;
+            let mut current_channel = channel_start;
+            let mut current_offset = bit_offset_in_channel;
+
+            while bits_read < 8 && current_channel < 3 {
+                let available_bits = lsb_bits as usize - current_offset;
+                let bits_to_read = std::cmp::min(available_bits, 8 - bits_read);
+                let channel_mask = ((1 << bits_to_read) - 1) as u8;
+
+                // Extract bits from the channel
+                let channel_bits = (pixel[current_channel] >> current_offset) & channel_mask;
+                byte |= channel_bits << (8 - bits_to_read - bits_read);
+
+                bits_read += bits_to_read;
+                current_channel += 1;
+                current_offset = 0;
+            }
+
+            // If we need more bits, read from the next pixel
+            if bits_read < 8 {
+                let next_pixel = start_pixel + 1;
+                let x = (next_pixel as u32) % img.width();
+                let y = (next_pixel as u32) / img.width();
+
+                if y >= img.height() {
+                    return Err(RainbowError::Other(format!(
+                        "Image too small to extract data: need y {}, have {}",
+                        y,
+                        img.height()
+                    )));
+                }
+
+                let next_pixel = img.get_pixel(x, y);
+                current_channel = 0;
 
                 while bits_read < 8 && current_channel < 3 {
-                    let available_bits = self.lsb_bits as usize - current_offset;
-                    let bits_to_read = std::cmp::min(available_bits, 8 - bits_read);
+                    let bits_to_read = std::cmp::min(lsb_bits as usize, 8 - bits_read);
                     let channel_mask = ((1 << bits_to_read) - 1) as u8;
 
                     // Extract bits from the channel
-                    let channel_bits = (pixel[current_channel] >> current_offset) & channel_mask;
+                    let channel_bits = next_pixel[current_channel] & channel_mask;
                     byte |= channel_bits << (8 - bits_to_read - bits_read);
 
                     bits_read += bits_to_read;
                     current_channel += 1;
-                    current_offset = 0;
                 }
-
-                // If we need more bits, read from the next pixel
-                if bits_read < 8 {
-                    let next_pixel = start_pixel + 1;
-                    let x = (next_pixel as u32) % img.width();
-                    let y = (next_pixel as u32) / img.width();
-
-                    if y >= img.height() {
-                        return Err(RainbowError::Other(format!(
-                            "Image too small to extract data: need y {}, have {}",
-                            y,
-                            img.height()
-                        )));
-                    }
-
-                    let next_pixel = img.get_pixel(x, y);
-                    current_channel = 0;
-
-                    while bits_read < 8 && current_channel < 3 {
-                        let bits_to_read = std::cmp::min(self.lsb_bits as usize, 8 - bits_read);
-                        let channel_mask = ((1 << bits_to_read) - 1) as u8;
-
-                        // Extract bits from the channel
-                        let channel_bits = next_pixel[current_channel] & channel_mask;
-                        byte |= channel_bits << (8 - bits_to_read - bits_read);
-
-                        bits_read += bits_to_read;
-                        current_channel += 1;
-                    }
-                }
-
-                result.push(byte);
             }
-        }
 
-        Ok(result)
+            result.push(byte);
+        }
     }
+
+    Ok(result)
 }
 
 #[cfg(test)]

@@ -55,11 +55,11 @@ impl Random for RssEncoder {
 impl Default for RssEncoder {
     fn default() -> Self {
         Self {
-            feed_title: "Rainbow RSS Feed".to_string(),
+            feed_title: "RSS Feed".to_string(),
             feed_link: "http://example.com/feed".to_string(),
-            feed_description: "A steganographic RSS feed".to_string(),
-            item_title: "Hidden Data".to_string(),
-            item_description: "This item contains hidden data".to_string(),
+            feed_description: "A RSS feed".to_string(),
+            item_title: "The Title".to_string(),
+            item_description: "This item.".to_string(),
         }
     }
 }

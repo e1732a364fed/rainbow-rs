@@ -42,10 +42,10 @@ impl Random for HoudiniEncoder {
 impl Default for HoudiniEncoder {
     fn default() -> Self {
         Self {
-            worklet_name: "stego-paint".to_string(),
-            class_name: "stego-container".to_string(),
-            property_name: "--stego-params".to_string(),
-            painter_class_name: "CustomPainter".to_string(),
+            worklet_name: "paint".to_string(),
+            class_name: "container".to_string(),
+            property_name: "--params".to_string(),
+            painter_class_name: "Painter".to_string(),
         }
     }
 }
