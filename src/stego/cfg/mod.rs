@@ -487,7 +487,7 @@ impl CFG {
             "QUOTE".to_owned() =>  init_plain_by_list(&QUOTES),
             "QUOTE_INTRO".to_owned() =>  init_plain_by_list(&QUOTE_INTROS),
             "CONTENT".to_owned() =>  init_plain_by_list(&CONTENT),
-            "DATELINE".to_owned() =>  init_plain_by_list(&vec!["{DATE} {CITY}"]),
+            "DATELINE".to_owned() =>  init_plain_by_list(& ["{DATE} {CITY}"]),
         };
 
         // Create CFG instance
@@ -517,7 +517,7 @@ impl Random for CFG {
 
         // 生成随机主语 (32)
         let subjects: Vec<String> = (0..8)
-            .map(|_| {
+            .flat_map(|_| {
                 let company = CompanyName().fake::<String>();
                 vec![
                     company.clone(),
@@ -526,14 +526,13 @@ impl Random for CFG {
                     format!("{} executives", company),
                 ]
             })
-            .flatten()
             .collect();
 
         assert_eq!(subjects.len(), 32);
 
         // 生成随机宾语 (32个)
         let objects: Vec<String> = {
-            let adj = vec![
+            let adj = [
                 "innovative",
                 "groundbreaking",
                 "revolutionary",
@@ -543,7 +542,7 @@ impl Random for CFG {
                 "next-generation",
                 "intelligent",
             ];
-            let noun = vec![
+            let noun = [
                 "technology",
                 "solution",
                 "platform",
@@ -587,13 +586,13 @@ impl Random for CFG {
 
         // 生成随机内容段落 (8个)
         let content: Vec<String> = {
-            let templates = vec![
+            let templates = [
                 "The development marks {} in the industry. ",
                 "This breakthrough could {} across sectors. ",
                 "The innovation represents {} for future growth. ",
                 "The technology demonstrates {} in real-world applications. ",
             ];
-            let impacts = vec![
+            let impacts = [
                 "a significant milestone",
                 "revolutionary potential",
                 "unprecedented opportunities",
@@ -601,11 +600,7 @@ impl Random for CFG {
             ];
             let mut combinations: Vec<String> = templates
                 .iter()
-                .flat_map(|t| {
-                    impacts
-                        .iter()
-                        .map(move |i| format!("{}", t.replace("{}", i)))
-                })
+                .flat_map(|t| impacts.iter().map(move |i| t.replace("{}", i).to_string()))
                 .collect();
             combinations.shuffle(&mut rand::thread_rng());
             combinations.into_iter().take(8).collect()
@@ -619,7 +614,7 @@ impl Random for CFG {
             let titles: Vec<String> = (0..16)
                 .map(|_| fake::faker::job::en::Title().fake::<String>())
                 .collect();
-            let templates = vec![
+            let templates = [
                 "\"We are excited about the potential impact of this development,\" said {}, {}.",
                 "\"This represents a major step forward for our industry,\" commented {}, {}.",
                 "\"The implications of this breakthrough are far-reaching,\" stated {}, {}.",
@@ -633,10 +628,9 @@ impl Random for CFG {
                 .iter()
                 .enumerate()
                 .map(|(i, t)| {
-                    format!(
-                        "{}",
-                        t.replace("{}", &names[i * 2]).replace("{}", &titles[i * 2])
-                    )
+                    t.replace("{}", &names[i * 2])
+                        .replace("{}", &titles[i * 2])
+                        .to_string()
                 })
                 .collect();
             combinations.shuffle(&mut rand::thread_rng());
@@ -650,7 +644,7 @@ impl Random for CFG {
             let positions: Vec<String> = (0..8)
                 .map(|_| fake::faker::job::en::Title().fake::<String>())
                 .collect();
-            let verbs = vec![
+            let verbs = [
                 "stated",
                 "commented",
                 "noted",
@@ -688,7 +682,7 @@ impl Random for CFG {
             "QUOTE".to_owned() => init_plain_by_list(&quotes.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
             "QUOTE_INTRO".to_owned() => init_plain_by_list(&quote_intros.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
             "CONTENT".to_owned() => init_plain_by_list(&content.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
-            "DATELINE".to_owned() => init_plain_by_list(&vec!["{DATE} {CITY}"]),
+            "DATELINE".to_owned() => init_plain_by_list(&["{DATE} {CITY}"]),
         };
 
         let cfg = CFG { variables };
@@ -760,29 +754,40 @@ impl Encoder for CFGEncoder {
         let mut current_byte_index = 0;
         let mut current_bit_index = 0;
 
+        let data_len = data.len();
+
         while current_byte_index < data.len() {
             let mut choices = HashMap::new();
 
             // 为当前句子编码数据
             for (var_name, productions) in &self.cfg.variables {
+                // println!("var_name: {}", var_name);
+
                 let num_productions = productions.len();
                 if num_productions <= 1 {
+                    // println!("continue here, num_productions <= 1");
                     continue;
                 }
 
                 let bits_per_var = (num_productions as f64).log2().floor() as u8;
                 if bits_per_var == 0 {
+                    // println!("continue here, bits_per_var == 0");
                     continue;
                 }
 
                 // 检查是否还有足够的数据需要编码
-                if current_byte_index >= data.len() {
+                if current_byte_index >= data_len {
+                    // println!("break here, current_byte_index >= data_len");
                     break;
                 }
 
                 let mut value = 0;
-                for _ in 0..bits_per_var {
-                    if current_byte_index >= data.len() {
+                for (bits_read, _) in (0_u8..).zip(0..bits_per_var) {
+                    if current_byte_index >= data_len {
+                        // 如果已经读取了部分比特，需要左移剩余的位数
+                        if bits_read > 0 {
+                            value <<= bits_per_var - bits_read;
+                        }
                         break;
                     }
 
@@ -797,6 +802,8 @@ impl Encoder for CFGEncoder {
                 }
 
                 value %= num_productions as u8;
+
+                // println!("insert var_name: {}, value: {}", var_name, value);
                 choices.insert(var_name.clone(), value as usize);
             }
 
