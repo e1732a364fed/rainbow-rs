@@ -10,6 +10,10 @@
  * - Uses color values, offsets and sizes as carriers for hidden bits
  * - Maintains visual appearance while storing secret data
  * - Suitable for web-based steganography scenarios
+ *
+ * The mime type is `application/json`
+ *
+ * See <https://developer.mozilla.org/en-US/docs/Web/API/Houdini_APIs>
  */
 
 use fake::{Fake, Faker};
@@ -70,7 +74,7 @@ impl Encoder for HoudiniEncoder {
     }
 
     fn get_mime_type(&self) -> &'static str {
-        "text/css"
+        "application/json"
     }
 }
 

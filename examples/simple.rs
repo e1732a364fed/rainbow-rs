@@ -68,7 +68,6 @@ fn process(
 
         info!("Writing packet {} to {}, length: {}", i, file_path, length);
 
-        // 解码数据包
         let DecodeResult {
             data: decoded,
             expected_return_length,
@@ -95,16 +94,11 @@ fn init() {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 初始化日志
     init();
 
-    // 创建 Rainbow 实例
-    let rainbow = Rainbow::new();
+    let rainbow = Rainbow::default();
 
-    // 读取测试文件
     let data = fs::read("res/test.txt")?;
-
-    // 测试所有支持的 MIME 类型
 
     info!("mime_types: {:?}", rainbow.registry.get_all_mime_types());
 

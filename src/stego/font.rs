@@ -31,7 +31,7 @@ pub struct FontEncoder {
     page_title: String,
     font_family: String,
     heading: String,
-    content: String,
+    tail_text: String,
 }
 
 impl Random for FontEncoder {
@@ -46,7 +46,7 @@ impl Random for FontEncoder {
                 "Typography by {}",
                 company::en::CompanyName().fake::<String>()
             ),
-            content: lorem::en::Paragraph(2..4).fake::<String>(),
+            tail_text: lorem::en::Paragraph(2..4).fake::<String>(),
         }
     }
 }
@@ -57,7 +57,7 @@ impl Default for FontEncoder {
             page_title: "Typography Showcase".to_string(),
             font_family: "Variable".to_string(),
             heading: "Typography Examples".to_string(),
-            content: "Exploring variable fonts in modern web design.".to_string(),
+            tail_text: "Exploring variable fonts in modern web design.".to_string(),
         }
     }
 }
@@ -73,7 +73,7 @@ impl Encoder for FontEncoder {
             &self.page_title,
             &self.font_family,
             &self.heading,
-            &self.content,
+            &self.tail_text,
         )
     }
 
@@ -108,7 +108,7 @@ fn generate_html_document(
     page_title: &str,
     font_family: &str,
     heading: &str,
-    content: &str,
+    tail_text: &str,
 ) -> String {
     format!(
         r#"<!DOCTYPE html>
@@ -148,7 +148,7 @@ fn generate_html_document(
         variations.join("\n        "),
         heading,
         chars.join("\n        "),
-        content
+        tail_text
     )
 }
 
@@ -158,7 +158,7 @@ pub fn encode(
     page_title: &str,
     font_family: &str,
     heading: &str,
-    content: &str,
+    tail_text: &str,
 ) -> Result<Vec<u8>> {
     debug!("Encoding data using font variation steganography");
 
@@ -187,7 +187,7 @@ pub fn encode(
         page_title,
         font_family,
         heading,
-        content,
+        tail_text,
     )
     .into_bytes())
 }

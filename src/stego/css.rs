@@ -25,7 +25,6 @@ use crate::stego::{Encoder, Random};
 
 #[derive(Debug, Clone)]
 pub struct CssEncoder {
-    page_title: String,
     content_text: String,
     anim_prefix: String,
     elem_prefix: String,
@@ -47,11 +46,6 @@ impl Random for CssEncoder {
         let delay_zero = zero_start..(zero_start + 0.1);
 
         Self {
-            page_title: format!(
-                "{} - {}",
-                company::en::CompanyName().fake::<String>(),
-                lorem::en::Sentence(3..6).fake::<String>()
-            ),
             content_text: lorem::en::Paragraph(1..3).fake::<String>(),
             anim_prefix: format!(
                 "anim-{}",
@@ -70,7 +64,6 @@ impl Random for CssEncoder {
 impl Default for CssEncoder {
     fn default() -> Self {
         Self {
-            page_title: "Dynamic Content".to_string(),
             content_text: "Experience smooth animations and transitions.".to_string(),
             anim_prefix: "a".to_string(),
             elem_prefix: "e".to_string(),
@@ -88,7 +81,6 @@ impl Encoder for CssEncoder {
     fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
         encode(
             data,
-            &self.page_title,
             &self.content_text,
             &self.anim_prefix,
             &self.elem_prefix,
@@ -109,7 +101,6 @@ impl Encoder for CssEncoder {
 /// Encode data into CSS animation. Output is a CSS file.
 pub fn encode(
     data: &[u8],
-    page_title: &str,
     content_text: &str,
     anim_prefix: &str,
     elem_prefix: &str,
@@ -120,8 +111,7 @@ pub fn encode(
         return Ok(content_text.as_bytes().to_vec());
     }
 
-    let mut animations = Vec::new();
-    let mut elements = Vec::new();
+    let mut animations = vec![".content { font-family: Arial; line-height: 1.6; }".to_string()];
     let mut rng = thread_rng();
 
     // Convert entire data into bit sequence
@@ -168,35 +158,12 @@ pub fn encode(
             anim_name,
             delays.join(",")
         ));
-
-        elements.push(format!(r#"<div id="{}"></div>"#, elem_id));
     }
 
-    // Generate complete HTML
-    let html = format!(
-        r#"<!DOCTYPE html>
-<html>
-<head>
-    <title>{}</title>
-    <style>
-        .content {{ font-family: Arial; line-height: 1.6; }}
-        {}
-    </style>
-</head>
-<body>
-    <div class="content">
-        {}
-        {}
-    </div>
-</body>
-</html>"#,
-        page_title,
-        animations.join("\n"),
-        content_text,
-        elements.join("\n")
-    );
+    // Generate complete css
+    let css = animations.join("\n");
 
-    Ok(html.into_bytes())
+    Ok(css.into_bytes())
 }
 
 /// Decode data from CSS animation
@@ -250,7 +217,6 @@ mod tests {
     fn test_encode_decode() {
         let encoded = encode(
             TEST_DATA,
-            "Test Page",
             "Test content",
             "anim",
             "elem",
@@ -280,7 +246,6 @@ mod tests {
     fn test_empty_data() {
         let encoded = encode(
             b"",
-            "Test Page",
             "Test content",
             "anim",
             "elem",

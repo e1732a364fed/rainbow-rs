@@ -69,12 +69,16 @@ pub struct Rainbow {
 }
 
 impl Default for Rainbow {
+    /// use default encoders
     fn default() -> Self {
-        Self::new()
+        Self {
+            registry: EncoderRegistry::default(),
+        }
     }
 }
 
 impl Rainbow {
+    /// use randomized encoders
     pub fn new() -> Self {
         Self {
             registry: EncoderRegistry::new_randomized(),

@@ -765,7 +765,7 @@ impl Encoder for CFGEncoder {
 
             // 添加分隔符（如果不是第一个句子）
             if !result.is_empty() {
-                result.extend_from_slice(b" ");
+                result.extend_from_slice(b"\n");
             }
             result.extend_from_slice(sentence.as_bytes());
         }

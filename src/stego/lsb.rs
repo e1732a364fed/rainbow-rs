@@ -35,14 +35,41 @@ pub struct LSBEncoder {
     cover_image: Option<DynamicImage>,
 }
 
+impl Default for LSBEncoder {
+    /// 默认使用一张本包自带的 cc0图片作为 cover_image
+    fn default() -> Self {
+        let mut s = Self {
+            lsb_bits: 1,
+            image_dir: None,
+            cover_image: None,
+        };
+
+        s.load_image_from_bytes(include_bytes!("../../res/Flower-436642-pixahive.jpg"))
+            .unwrap();
+        s
+    }
+}
+
+impl Random for LSBEncoder {
+    /// 随机生成一个 LSBEncoder. 使用 空 image_dir 和 随机图片作为 cover_image
+    fn random() -> Self {
+        Self {
+            lsb_bits: rand::random::<u8>() % 3 + 1, // Use 1-3 LSB bits
+            image_dir: None,
+            cover_image: None,
+        }
+    }
+}
+
 impl LSBEncoder {
+    /// It will load a random image from the image_dir and set it as self.cover_image
     pub fn new(image_dir: PathBuf) -> Result<Self> {
         let mut encoder = Self {
             lsb_bits: 1,
             image_dir: Some(image_dir.clone()),
             cover_image: None,
         };
-        encoder.load_random_image()?;
+        encoder.load_random_image_from_dir()?;
         Ok(encoder)
     }
 
@@ -58,6 +85,7 @@ impl LSBEncoder {
         }
     }
 
+    /// 从指定路径加载图片作为 self.cover_image
     pub fn load_image(&mut self, image_path: PathBuf) -> Result<()> {
         let img = image::open(image_path)
             .map_err(|e| RainbowError::Other(format!("Failed to load image: {}", e)))?;
@@ -65,8 +93,15 @@ impl LSBEncoder {
         Ok(())
     }
 
+    pub fn load_image_from_bytes(&mut self, image_bytes: &[u8]) -> Result<()> {
+        let img = image::load_from_memory(image_bytes)
+            .map_err(|e| RainbowError::Other(format!("Failed to load image: {}", e)))?;
+        self.cover_image = Some(img);
+        Ok(())
+    }
+
     /// 从 self.image_dir 中随机选择一张图片作为 self.cover_image
-    fn load_random_image(&mut self) -> Result<()> {
+    pub fn load_random_image_from_dir(&mut self) -> Result<()> {
         if let Some(dir) = &self.image_dir {
             let entries: Vec<_> = fs::read_dir(dir)
                 .map_err(|e| RainbowError::Other(format!("Failed to read directory: {}", e)))?
@@ -101,29 +136,9 @@ impl LSBEncoder {
     }
 }
 
-impl Default for LSBEncoder {
-    fn default() -> Self {
-        Self {
-            lsb_bits: 1,
-            image_dir: None,
-            cover_image: None,
-        }
-    }
-}
-
-impl Random for LSBEncoder {
-    fn random() -> Self {
-        Self {
-            lsb_bits: rand::random::<u8>() % 3 + 1, // Use 1-3 LSB bits
-            image_dir: None,
-            cover_image: None,
-        }
-    }
-}
-
 impl Encoder for LSBEncoder {
     fn name(&self) -> &'static str {
-        "image"
+        "lsb"
     }
 
     fn get_mime_type(&self) -> &'static str {
