@@ -28,6 +28,54 @@ pub fn data_find(data: &[u8], target: &[u8]) -> Option<usize> {
         .position(|window| window == target)
 }
 
+///  找到匹配的右括号位置
+pub fn find_matching_brace(text: &str, start: usize) -> Option<usize> {
+    let mut stack = 0;
+    for (i, c) in text[start..].char_indices() {
+        match c {
+            '{' => stack += 1,
+            '}' => {
+                stack -= 1;
+                if stack == 0 {
+                    return Some(start + i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+#[test]
+fn test_find_matching_brace() {
+    // 测试简单的大括号匹配
+    assert_eq!(find_matching_brace("{simple}", 0), Some(7));
+
+    // 测试嵌套的大括号
+    assert_eq!(find_matching_brace("{outer{inner}}", 0), Some(13));
+
+    // 测试多层嵌套
+    assert_eq!(find_matching_brace("{a{b{c}}}", 0), Some(8));
+
+    // 测试实际的变量模式
+    assert_eq!(find_matching_brace("{noun} {verb}", 0), Some(5));
+
+    // 测试不完整的大括号
+    assert_eq!(find_matching_brace("{unclosed", 0), None);
+
+    // 测试空字符串
+    assert_eq!(find_matching_brace("", 0), None);
+
+    // 测试从中间位置开始
+    assert_eq!(find_matching_brace("prefix{mid}suffix", 6), Some(10));
+
+    // 测试多个大括号对
+    let text = "{first} {second} {third}";
+    assert_eq!(find_matching_brace(text, 0), Some(6));
+    assert_eq!(find_matching_brace(text, 7), Some(15));
+    assert_eq!(find_matching_brace(text, 17), Some(23));
+}
+
 pub struct HttpConstants {
     pub cookie_names: &'static [&'static str],
     pub post_paths: &'static [&'static str],

@@ -124,7 +124,7 @@ impl Encoder for LSBEncoder {
         let data_len = data.len();
         let bits_per_pixel = self.lsb_bits as usize * 3; // 3 channels (RGB)
         let total_bits = (data_len + 4) * 8; // 4 bytes for length + data bytes
-        let pixels_needed = (total_bits + bits_per_pixel - 1) / bits_per_pixel;
+        let pixels_needed = total_bits.div_ceil(bits_per_pixel); //(total_bits + bits_per_pixel - 1) / bits_per_pixel;
 
         // Add extra margin for safety, especially for multi-bit LSB
         let margin = if self.lsb_bits > 1 {
