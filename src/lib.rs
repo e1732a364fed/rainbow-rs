@@ -29,8 +29,8 @@ pub enum RainbowError {
     #[error("Decode failed: {0}")]
     DecodeFailed(String),
 
-    #[error("Length mismatch: {0}")]
-    LengthMismatch(String),
+    #[error("Length mismatch: {0} vs {1}")]
+    LengthMismatch(usize, usize),
 
     #[error("HTTP error: {0}")]
     HttpError(String),
@@ -61,6 +61,12 @@ pub struct EncodeResult {
     pub expected_return_packet_lengths: Vec<usize>,
 }
 
+/// Trait NetworkSteganographyProcessor provides a way to encode and decode data into a series of network packets.
+///
+/// Every write will convert data to a series of alternating network packets, in which each
+/// packet is paired with a length of the expected return packet.
+///
+/// Every read will parse out the data, and metadata like expected_return_length and is_read_end.
 pub trait NetworkSteganographyProcessor: DynClone {
     /// Encode data into a series of network packets
     fn encode_write(

@@ -13,6 +13,7 @@ serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0.108"
 base64 = "0.21.5"
 rand = "0.8.5"
+rand_chacha = "0.3.1"
 chrono = "0.4.31"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
@@ -23,3 +24,6 @@ uuid = { version = "1.6.1", features = ["v4"] }
 clap = { version = "4.4.11", features = ["derive"] }
 regex = "1.10.2"
 fake = { version = "2.9", features = ["derive"] }
+aes-gcm = "0.10.3"
+chacha20poly1305 = "0.10.1"
+generic-array = "0.14.7"

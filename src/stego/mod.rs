@@ -21,12 +21,13 @@ pub mod grid;
 pub mod houdini;
 pub mod html;
 pub mod json;
+pub mod octet;
 pub mod prism;
 pub mod rss;
 pub mod svg_path;
 pub mod xml;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use dyn_clone::DynClone;
 use rand::{seq::SliceRandom, Rng};
@@ -51,21 +52,6 @@ pub trait Encoder: std::fmt::Debug + DynClone {
 
 dyn_clone::clone_trait_object!(Encoder);
 
-const MIME_TYPES: &[(&str, &[&str])] = &[
-    ("text/html", &["html", "prism", "font"]),
-    ("text/css", &["css", "houdini", "grid"]),
-    ("application/json", &["json"]),
-    ("application/xml", &["xml", "rss"]),
-    ("audio/wav", &["audio"]),
-    ("image/svg+xml", &["svg_path"]),
-];
-
-/// Get random MIME type
-pub fn get_random_mime_type() -> String {
-    let (mime_type, _) = MIME_TYPES[rand::thread_rng().gen_range(0..MIME_TYPES.len())];
-    mime_type.to_string()
-}
-
 #[derive(Debug, Clone)]
 pub struct EncodersHolder {
     encoders: HashMap<String, Box<dyn Encoder>>,
@@ -76,7 +62,6 @@ impl Default for EncodersHolder {
         let mut encoders: HashMap<String, Box<dyn Encoder>> = HashMap::new();
         encoders.insert("html".to_string(), Box::new(html::HtmlEncoder::default()));
         encoders.insert("json".to_string(), Box::new(json::JsonEncoder::default()));
-
         encoders.insert(
             "prism".to_string(),
             Box::new(prism::PrismEncoder::default()),
@@ -94,6 +79,10 @@ impl Default for EncodersHolder {
         encoders.insert(
             "svg_path".to_string(),
             Box::new(svg_path::SvgPathEncoder::default()),
+        );
+        encoders.insert(
+            "octet".to_string(),
+            Box::new(octet::OctetEncoder::default()),
         );
         Self { encoders }
     }
@@ -119,6 +108,7 @@ impl EncodersHolder {
             "svg_path".to_string(),
             Box::new(svg_path::SvgPathEncoder::random()),
         );
+        encoders.insert("octet".to_string(), Box::new(octet::OctetEncoder::random()));
         Self { encoders }
     }
 
@@ -129,10 +119,50 @@ impl EncodersHolder {
     pub fn add(&mut self, encoder: Box<dyn Encoder>) {
         self.encoders.insert(encoder.name().to_string(), encoder);
     }
-}
 
-impl EncodersHolder {
-    /// Encode data based on MIME type
+    pub fn get_all_mime_types(&self) -> Vec<&str> {
+        self.encoders
+            .iter()
+            .map(|(_, encoder)| encoder.get_mime_type())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    /// Get random MIME type
+    pub fn get_random_mime_type(&self) -> String {
+        let mime_types: Vec<&str> = self
+            .encoders
+            .iter()
+            .map(|(_, encoder)| encoder.get_mime_type())
+            .collect();
+        mime_types
+            .choose(&mut rand::thread_rng())
+            .unwrap()
+            .to_string()
+    }
+
+    pub fn encode_with(&self, data: &[u8], encoder: &str) -> Result<Vec<u8>> {
+        self.encoders
+            .get(encoder)
+            .ok_or(RainbowError::Other(format!(
+                "Encoder not found: {}",
+                encoder
+            )))?
+            .encode(data)
+    }
+
+    pub fn decode_with(&self, data: &[u8], decoder: &str) -> Result<Vec<u8>> {
+        self.encoders
+            .get(decoder)
+            .ok_or(RainbowError::Other(format!(
+                "Encoder not found: {}",
+                decoder
+            )))?
+            .decode(data)
+    }
+
+    /// Encode data based on MIME type, will use a random encoder from the matching encoders
     pub fn encode_mime(&self, data: &[u8], mime_type: &str) -> Result<Vec<u8>> {
         // Get all encoders that match the MIME type
         let matching_encoders: Vec<_> = self
@@ -160,7 +190,7 @@ impl EncodersHolder {
         encoder.encode(data)
     }
 
-    /// Decode data based on MIME type
+    /// Decode data based on MIME type, will try to use every matching encoder until one succeeds
     pub fn decode_mime(&self, data: &[u8], mime_type: &str) -> Result<Vec<u8>> {
         // Get all encoders that match the MIME type
         let mut matching_encoders: Vec<_> = self
@@ -178,6 +208,8 @@ impl EncodersHolder {
 
         matching_encoders.shuffle(&mut rand::thread_rng());
 
+        let mut last_error = None;
+
         // Try each matching encoder until one succeeds
         for (name, encoder) in matching_encoders {
             debug!(
@@ -192,14 +224,17 @@ impl EncodersHolder {
                     );
                     return Ok(decoded);
                 }
-                _ => continue,
+                r => {
+                    last_error = Some(r);
+                    continue;
+                }
             }
         }
 
         // If no decoder succeeded, return the original data
         Err(RainbowError::Other(format!(
-            "No decoder succeeded for MIME type: {}",
-            mime_type
+            "No decoder succeeded for MIME type: {}, last error: {:?}",
+            mime_type, last_error
         )))
     }
 }
@@ -223,7 +258,7 @@ mod tests {
         let encoders = EncodersHolder::default();
 
         // Test all MIME types
-        for (mime_type, _) in MIME_TYPES {
+        for mime_type in encoders.get_all_mime_types() {
             let encoded = encoders.encode_mime(test_data, mime_type).unwrap();
             let decoded = encoders.decode_mime(&encoded, mime_type).unwrap();
             assert_eq!(decoded, test_data);
@@ -232,8 +267,9 @@ mod tests {
 
     #[test]
     fn test_random_mime_type() {
-        let mime_type = get_random_mime_type();
-        assert!(MIME_TYPES.iter().any(|(mt, _)| *mt == mime_type));
+        let encoders = EncodersHolder::default();
+        let mime_type = encoders.get_random_mime_type();
+        assert!(encoders.get_all_mime_types().contains(&mime_type.as_str()));
     }
 
     #[test]
@@ -249,7 +285,7 @@ mod tests {
         init();
         let test_data = b"";
         let encoders = EncodersHolder::default();
-        for (mime_type, _) in MIME_TYPES {
+        for mime_type in encoders.get_all_mime_types() {
             let encoded = encoders.encode_mime(test_data, mime_type).unwrap();
             let decoded = encoders.decode_mime(&encoded, mime_type);
 
@@ -263,7 +299,7 @@ mod tests {
     fn test_large_data_mime() {
         let test_data: Vec<u8> = (0..2000).map(|i| (i % 256) as u8).collect();
         let encoders = EncodersHolder::default();
-        for (mime_type, _) in MIME_TYPES {
+        for mime_type in encoders.get_all_mime_types() {
             let encoded = encoders.encode_mime(&test_data, mime_type).unwrap();
             let decoded = encoders.decode_mime(&encoded, mime_type).unwrap();
             assert!(!decoded.is_empty());

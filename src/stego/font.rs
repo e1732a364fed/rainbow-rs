@@ -21,7 +21,7 @@ Key features:
 use crate::Result;
 use fake::{faker::*, Fake};
 use regex::Regex;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 use crate::stego::{Encoder, Random};
 
@@ -217,9 +217,12 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
             // Restore byte value from font variation parameters
             let byte_value = (((weight - 100) / 100) << 4 | (width / 6)) as u8;
             result.push(byte_value);
-            debug!(
+            trace!(
                 "Decoded font settings (weight={}, width={}, slant={}) to byte: {}",
-                weight, width, slant, byte_value
+                weight,
+                width,
+                slant,
+                byte_value
             );
         }
     }

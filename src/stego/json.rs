@@ -99,17 +99,17 @@ pub fn decode(json_content: &[u8]) -> Result<Vec<u8>> {
     }
 
     // Log raw content for debugging
-    debug!(
-        "Raw JSON content: {}",
-        String::from_utf8_lossy(json_content)
-    );
+    // debug!(
+    //     "Raw JSON content: {}",
+    //     String::from_utf8_lossy(json_content)
+    // );
 
     // Parse JSON
     let json_obj: Value = serde_json::from_slice(json_content)?;
 
     // Extract data from metadata field
     if let Some(encoded_data) = json_obj.get("metadata").and_then(|v| v.as_str()) {
-        debug!("Found encoded data: {}", encoded_data);
+        // debug!("Found encoded data: {}", encoded_data);
 
         // Try to decode Base64 data
         if let Ok(decoded) = BASE64.decode(encoded_data) {

@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 use crate::{
-    stego::{get_random_mime_type, EncodersHolder},
+    stego::EncodersHolder,
     utils::{generate_realistic_headers, validate_http_packet, HTTP_CONSTANTS},
     DecodeResult, EncodeResult, NetworkSteganographyProcessor, RainbowError, Result,
 };
@@ -428,7 +428,7 @@ impl Rainbow {
         let mime_type = if is_small_packet {
             "application/json".to_string()
         } else {
-            get_random_mime_type()
+            self.encoders.get_random_mime_type()
         };
 
         // 添加基础头部
@@ -496,7 +496,9 @@ impl NetworkSteganographyProcessor for Rainbow {
 
         for (i, chunk) in chunks.iter().enumerate() {
             let packet_info = PacketInfo::new(i, total_chunks, chunk.len());
-            let mime = mime_type.clone().unwrap_or_else(get_random_mime_type);
+            let mime = mime_type
+                .clone()
+                .unwrap_or_else(|| self.encoders.get_random_mime_type());
 
             // 生成数据包
             let packet = if is_client {

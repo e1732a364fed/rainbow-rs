@@ -119,7 +119,7 @@ pub fn decode(xml_content: &[u8]) -> Result<Vec<u8>> {
     }
 
     let xml_str = String::from_utf8_lossy(xml_content);
-    debug!("XML content to decode:\n{}", xml_str);
+    // debug!("XML content to decode:\n{}", xml_str);
 
     // Extract Base64 encoded data from CDATA section
     if let Some(encoded_data) = xml_str.find("<data><![CDATA[").and_then(|start| {
@@ -128,7 +128,7 @@ pub fn decode(xml_content: &[u8]) -> Result<Vec<u8>> {
             .find("]]></data>")
             .map(|end| &xml_str[start..start + end])
     }) {
-        debug!("Found encoded data: {}", encoded_data);
+        // debug!("Found encoded data: {}", encoded_data);
         if let Ok(decoded_data) = BASE64.decode(encoded_data) {
             info!("Successfully decoded {} bytes from XML", decoded_data.len());
             return Ok(decoded_data);
