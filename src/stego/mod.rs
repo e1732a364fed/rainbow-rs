@@ -15,6 +15,7 @@
  */
 
 pub mod audio;
+pub mod cfg;
 pub mod css;
 pub mod font;
 pub mod grid;
@@ -55,7 +56,7 @@ dyn_clone::clone_trait_object!(Encoder);
 
 #[derive(Debug, Clone)]
 pub struct EncoderRegistry {
-    encoders: HashMap<String, Box<dyn Encoder>>,
+    pub encoders: HashMap<String, Box<dyn Encoder>>,
 }
 
 impl Default for EncoderRegistry {

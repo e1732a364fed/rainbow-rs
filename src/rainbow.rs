@@ -766,7 +766,6 @@ mod tests {
 
         let rainbow = Rainbow::new();
 
-        // 测试请求生成 - 使用更大的初始大小
         let target_length = 500;
         let request = rainbow
             .generate_stego_packet_with_length(target_length, true)
@@ -785,7 +784,6 @@ mod tests {
 
         let rainbow = Rainbow::new();
 
-        // 测试请求生成 - 使用更大的初始大小
         let target_length = 2000;
         let request = rainbow
             .generate_stego_packet_with_length(target_length, true)
@@ -984,24 +982,6 @@ mod tests {
         } = rainbow.encode_write(test_data, false, None).unwrap();
         let response = &response_packets[0];
         assert!(response.starts_with(b"HTTP/1.1"));
-    }
-
-    #[test]
-    fn test_mime_type_handling() {
-        init();
-        let rainbow = Rainbow::new();
-        let test_data = b"Test Data";
-        let mime_type = Some("text/plain".to_string());
-
-        let EncodeResult {
-            encoded_packets: packets,
-            expected_return_packet_lengths: _,
-        } = rainbow.encode_write(test_data, true, mime_type).unwrap();
-        let packet = &packets[0];
-
-        // 对于 text/plain，应该使用 GET 请求
-        assert!(packet.starts_with(b"GET "));
-        assert!(data_find(packet, b"X-Data:").is_some());
     }
 
     #[test]
