@@ -17,8 +17,8 @@ Best used for:
 - Scenarios where audio quality preservation is critical
 */
 
-use crate::stego::Encoder;
 use crate::Result;
+use crate::{stego::Encoder, RainbowError};
 use base64::{engine::general_purpose, Engine as _};
 use std::f64::consts::PI;
 use tracing::{debug, warn};
@@ -146,16 +146,21 @@ impl AudioEncoder {
     }
 }
 
-impl Encoder for AudioEncoder {
+#[derive(Debug, Clone, Default)]
+pub struct AudioHtmlEncoder {
+    pub encoder: AudioWavEncoder,
+}
+
+impl Encoder for AudioHtmlEncoder {
     fn name(&self) -> &'static str {
-        "audio"
+        "audio_html"
     }
 
     fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
         debug!("Encoding data using Web Audio API stego");
 
         if data.is_empty() {
-            return Ok(b"<audio id=\"stego-audio\" style=\"display:none\"></audio>".to_vec());
+            return Ok(b"<audio style=\"display:none\"></audio>".to_vec());
         }
 
         let data = if data.len() > 1000 {
@@ -166,21 +171,22 @@ impl Encoder for AudioEncoder {
         };
 
         // Generate audio waveform
-        let audio_data = self.generate_audio_data(data);
-
-        // Convert audio data to string
-        let audio_str = audio_data
-            .iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<_>>()
-            .join(",");
+        let audio_data = self.encoder.encode(data)?;
 
         // Base64 encoding
-        let encoded = general_purpose::STANDARD.encode(audio_str);
+        let encoded = general_purpose::STANDARD.encode(audio_data.as_slice());
 
-        // Generate HTML
         let html = format!(
-            "<audio id=\"stego-audio\" style=\"display:none\" data-audio=\"{}\"></audio>",
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <audio controls src="data:audio/wav;base64,{}"></audio>
+</body>
+</html>"#,
             encoded
         );
 
@@ -195,24 +201,14 @@ impl Encoder for AudioEncoder {
 
         // Extract base64 encoded data
         if let Some(encoded) = content
-            .split("data-audio=\"")
+            .split("data:audio/wav;base64,")
             .nth(1)
             .and_then(|s| s.split('"').next())
         {
             // Decode base64
-            if let Ok(audio_str) = general_purpose::STANDARD.decode(encoded) {
-                if let Ok(audio_str) = String::from_utf8(audio_str) {
-                    // Parse audio samples
-                    let samples: Vec<f64> = audio_str
-                        .split(',')
-                        .filter_map(|s| s.parse::<f64>().ok())
-                        .collect();
-
-                    // Extract data from samples
-                    if let Some(data) = self.extract_data(&samples) {
-                        return Ok(data);
-                    }
-                }
+            if let Ok(audio_bs) = general_purpose::STANDARD.decode(encoded) {
+                // Extract data from samples
+                return self.encoder.decode(&audio_bs);
             }
         }
 
@@ -220,7 +216,77 @@ impl Encoder for AudioEncoder {
     }
 
     fn get_mime_type(&self) -> &'static str {
+        "text/html"
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AudioWavEncoder {
+    pub encoder: AudioEncoder,
+}
+
+impl Encoder for AudioWavEncoder {
+    fn name(&self) -> &'static str {
+        "audio_wav"
+    }
+
+    fn get_mime_type(&self) -> &'static str {
         "audio/wav"
+    }
+    fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
+        debug!("Encoding data using WAV stego");
+
+        if data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Generate audio waveform
+        let audio_data = self.encoder.generate_audio_data(data);
+
+        let mut buf = Vec::new();
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: self.encoder.sample_rate,
+            bits_per_sample: self.encoder.frame_size as u16,
+            sample_format: hound::SampleFormat::Float,
+        };
+
+        let cursor = std::io::Cursor::new(&mut buf);
+
+        let buf_writer = std::io::BufWriter::new(cursor);
+        let mut writer = hound::WavWriter::new(buf_writer, spec)
+            .map_err(|e| RainbowError::Other(e.to_string()))?;
+
+        for t in audio_data {
+            writer.write_sample(t as f32).unwrap();
+        }
+        writer.finalize().unwrap();
+
+        Ok(buf)
+    }
+
+    fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
+        if content.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let file = std::io::Cursor::new(content);
+
+        let buf_reader = std::io::BufReader::new(file);
+        let mut reader =
+            hound::WavReader::new(buf_reader).map_err(|e| RainbowError::Other(e.to_string()))?;
+
+        let samples: Vec<f64> = reader
+            .samples::<f32>()
+            .into_iter()
+            .map(|x| x.unwrap() as f64)
+            .collect();
+
+        if let Some(data) = self.encoder.extract_data(&samples) {
+            return Ok(data);
+        }
+
+        Ok(Vec::new())
     }
 }
 
@@ -236,9 +302,24 @@ mod tests {
     }
 
     #[test]
+    fn test_wav() {
+        init();
+        let encoder = AudioWavEncoder::default();
+        let test_data = b"Hello, Audio Steganography!";
+
+        // Test encoding
+        let encoded = encoder.encode(test_data).unwrap();
+        assert!(!encoded.is_empty());
+
+        // Test decoding
+        let decoded = encoder.decode(&encoded).unwrap();
+        assert_eq!(decoded, test_data);
+    }
+
+    #[test]
     fn test_audio() {
         init();
-        let encoder = AudioEncoder::default();
+        let encoder = AudioHtmlEncoder::default();
         let test_data = b"Hello, Audio Steganography!";
 
         // Test encoding
@@ -257,7 +338,7 @@ mod tests {
 
     #[test]
     fn test_empty_data() {
-        let encoder = AudioEncoder::default();
+        let encoder = AudioHtmlEncoder::default();
         let test_data = b"";
 
         // Test encoding empty data
@@ -272,7 +353,7 @@ mod tests {
 
     #[test]
     fn test_large_data() {
-        let encoder = AudioEncoder::default();
+        let encoder = AudioHtmlEncoder::default();
         let test_data: Vec<u8> = (0..2000).map(|i| (i % 256) as u8).collect();
 
         // Test encoding large data
@@ -288,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_invalid_input() {
-        let encoder = AudioEncoder::default();
+        let encoder = AudioHtmlEncoder::default();
 
         // Test decoding invalid input
         let decoded = encoder.decode(b"invalid audio data").unwrap();

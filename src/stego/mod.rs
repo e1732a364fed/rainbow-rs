@@ -41,7 +41,7 @@ use rand::{seq::SliceRandom, Rng};
 use tracing::debug;
 
 use crate::{RainbowError, Result};
-use audio::AudioEncoder;
+use audio::{AudioHtmlEncoder, AudioWavEncoder};
 use lsb::LSBEncoder;
 
 /// A trait for types that can be randomly generated
@@ -50,7 +50,12 @@ pub trait Random {
     fn random() -> Self;
 }
 
-/// A trait for types that can encode and decode data
+/// A trait for types that can encode and decode data.
+///
+/// Note that each encoder only supports one MIME type.
+///
+/// If you want your algorithm to output multiple mime types, you can use the [`EncoderRegistry`] to
+/// register multiple encoders with different mime types.
 pub trait Encoder: std::fmt::Debug + dyn_clone::DynClone + Send + Sync {
     /// The name of the encoder
     fn name(&self) -> &'static str;
@@ -94,7 +99,14 @@ impl Default for EncoderRegistry {
         encoders.insert("grid".to_string(), Box::new(grid::GridEncoder::default()));
         encoders.insert("xml".to_string(), Box::new(xml::XmlEncoder::default()));
         encoders.insert("rss".to_string(), Box::new(rss::RssEncoder::default()));
-        encoders.insert("audio".to_string(), Box::new(AudioEncoder::default()));
+        encoders.insert(
+            "audio_html".to_string(),
+            Box::new(AudioHtmlEncoder::default()),
+        );
+        encoders.insert(
+            "audio_wav".to_string(),
+            Box::new(AudioWavEncoder::default()),
+        );
         encoders.insert("lsb".to_string(), Box::new(LSBEncoder::default()));
         encoders.insert(
             "svg_path".to_string(),
@@ -125,7 +137,14 @@ impl EncoderRegistry {
         encoders.insert("grid".to_string(), Box::new(grid::GridEncoder::random()));
         encoders.insert("xml".to_string(), Box::new(xml::XmlEncoder::random()));
         encoders.insert("rss".to_string(), Box::new(rss::RssEncoder::random()));
-        encoders.insert("audio".to_string(), Box::new(AudioEncoder::default()));
+        encoders.insert(
+            "audio_html".to_string(),
+            Box::new(AudioHtmlEncoder::default()),
+        );
+        encoders.insert(
+            "audio_wav".to_string(),
+            Box::new(AudioWavEncoder::default()),
+        );
         encoders.insert("lsb".to_string(), Box::new(LSBEncoder::random()));
         encoders.insert(
             "svg_path".to_string(),
