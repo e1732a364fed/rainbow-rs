@@ -17,7 +17,7 @@ use tracing::{debug, info};
 
 use crate::{
     stego::EncodersHolder,
-    utils::{generate_realistic_headers, validate_http_packet, HTTP_CONSTANTS},
+    utils::{find_crlf_crlf, generate_realistic_headers, validate_http_packet, HTTP_CONSTANTS},
     DecodeResult, EncodeResult, NetworkSteganographyProcessor, RainbowError, Result,
 };
 
@@ -50,8 +50,7 @@ impl PacketInfo {
 
     fn from_cookie(cookie: &str) -> Result<Self> {
         let bytes = BASE64.decode(cookie)?;
-        let json = String::from_utf8_lossy(&bytes);
-        Ok(serde_json::from_str(&json)?)
+        Ok(serde_json::from_slice(&bytes)?)
     }
 }
 
@@ -171,6 +170,7 @@ impl Rainbow {
     ) -> Result<Vec<u8>> {
         let use_get = mime_type.contains("text/plain") || mime_type.contains("application/json");
         let method = if use_get { "GET" } else { "POST" };
+
         let paths = if use_get {
             HTTP_CONSTANTS.get_paths
         } else {
@@ -182,6 +182,7 @@ impl Rainbow {
         headers.push_str(&format!("{} {} HTTP/1.1\r\n", method, path));
         headers.push_str(&self.build_common_headers(true));
         headers.push_str(&format!("Accept: {}\r\n", self.get_accept_header(path)));
+
         headers.push_str(&self.build_cookie_header(packet_info, true)?);
 
         if method == "GET" {
@@ -192,6 +193,12 @@ impl Rainbow {
             headers.push_str(&format!("Content-Type: {}\r\n", mime_type));
             headers.push_str(&format!("Content-Length: {}\r\n", data.len()));
             headers.push_str("\r\n");
+
+            debug!(
+                "building request with method: {} content length: {}",
+                method,
+                data.len()
+            );
 
             let mut v = headers.into_bytes();
             v.extend_from_slice(data);
@@ -226,10 +233,14 @@ impl Rainbow {
     }
 
     fn decode_single_packet(&self, packet: &[u8], packet_index: usize) -> Result<Vec<u8>> {
-        let content = unsafe { String::from_utf8_unchecked(packet.to_vec()) };
-        let (header, body) = content.split_once("\r\n\r\n").ok_or_else(|| {
+        let split_pos = find_crlf_crlf(packet).ok_or_else(|| {
             RainbowError::InvalidData(HTTP_CONSTANTS.error_details[3].1.to_string())
         })?;
+
+        let mut data_to_decode = Vec::new();
+
+        let header = String::from_utf8_lossy(&packet[..split_pos]);
+        let body = &packet[split_pos + 4..];
 
         // 获取请求方法
         let first_line = header
@@ -239,89 +250,73 @@ impl Rainbow {
 
         // 处理 GET 请求中的 X-Data header
         if first_line.starts_with("GET") {
+            let mut ok = false;
             for line in header.lines() {
                 if line.to_lowercase().starts_with("x-data:") {
                     let encoded_data =
                         line.split_once(':').map(|(_, v)| v.trim()).ok_or_else(|| {
                             RainbowError::InvalidData("Invalid X-Data header".to_string())
                         })?;
-                    return Ok(BASE64.decode(encoded_data).map_err(|_| {
-                        RainbowError::InvalidData(HTTP_CONSTANTS.error_details[2].1.to_string())
-                    })?);
+
+                    data_to_decode = BASE64.decode(encoded_data)?;
+                    ok = true;
+                    break;
                 }
             }
-            return Err(RainbowError::InvalidData(
-                "Missing X-Data header in GET request".to_string(),
-            ));
+            if !ok {
+                return Err(RainbowError::InvalidData(
+                    "Missing X-Data header in GET request".to_string(),
+                ));
+            }
+        } else {
+            data_to_decode = body.to_vec();
         }
 
         // 处理 POST 请求
         // 获取 MIME 类型
-        let mime_type = header
-            .lines()
-            .find(|line| line.to_lowercase().starts_with("content-type:"))
-            .and_then(|line| line.split_once(':'))
-            .map(|(_, value)| value.trim())
-            .ok_or_else(|| {
-                RainbowError::InvalidData(HTTP_CONSTANTS.error_details[0].1.to_string())
-            })?;
+        if first_line.starts_with("GET") {
+            let decoded = self.encoders.decode_mime(&data_to_decode, "text/plain");
 
-        debug!(
-            "Processing packet {}: MIME type: {}, Content length: {}",
-            packet_index,
-            mime_type,
-            body.len()
-        );
-
-        // 解码数据
-        let decoded = self.encoders.decode_mime(body.as_bytes(), mime_type)?;
-        debug!("Successfully decoded content: length={}", decoded.len());
-
-        Ok(decoded)
-    }
-
-    // 添加验证数据包长度的方法
-    fn verify_length(&self, packet: &[u8], expected_length: usize) -> Result<()> {
-        let content = String::from_utf8_lossy(packet);
-        if let Some((header, _)) = content.split_once("\r\n\r\n") {
-            // 获取请求方法
-            let first_line = header
-                .lines()
-                .next()
-                .ok_or_else(|| RainbowError::InvalidData("Cannot get first line".to_string()))?;
-
-            // 对于 GET 请求，验证 X-Data 的长度
-            if first_line.starts_with("GET") {
-                for line in header.lines() {
-                    if line.to_lowercase().starts_with("x-data:") {
-                        if let Some((_, value)) = line.split_once(':') {
-                            let decoded = BASE64.decode(value.trim())?;
-                            if decoded.len() == expected_length {
-                                return Ok(());
-                            }
-                        }
-                    }
-                }
+            if let Ok(decoded) = decoded {
+                debug!("Successfully decoded content: length={}", decoded.len());
+                Ok(decoded)
             } else {
-                // 对于 POST 请求，验证 Content-Length
-                for line in header.lines() {
-                    if line.to_lowercase().starts_with("content-length:") {
-                        if let Some((_, value)) = line.split_once(':') {
-                            if let Ok(length) = value.trim().parse::<usize>() {
-                                if length > 0 {
-                                    return Ok(());
-                                }
-                            }
-                        }
-                    }
+                let decoded = self
+                    .encoders
+                    .decode_mime(&data_to_decode, "application/json");
+                if let Ok(decoded) = decoded {
+                    debug!("Successfully decoded content: length={}", decoded.len());
+                    Ok(decoded)
+                } else {
+                    Err(RainbowError::InvalidData(
+                        "Failed to decode content".to_string(),
+                    ))
                 }
             }
-        }
-        Err(RainbowError::InvalidData(
-            "Content length mismatch".to_string(),
-        ))
-    }
+        } else {
+            let mime_type = header
+                .lines()
+                .find(|line| line.to_lowercase().starts_with("content-type:"))
+                .and_then(|line| line.split_once(':'))
+                .map(|(_, value)| value.trim())
+                .ok_or_else(|| {
+                    RainbowError::InvalidData(HTTP_CONSTANTS.error_details[0].1.to_string())
+                })?;
 
+            debug!(
+                "Processing packet {}: MIME type: {}, Content length: {}",
+                packet_index,
+                mime_type,
+                body.len()
+            );
+
+            // 解码数据
+            let decoded = self.encoders.decode_mime(&data_to_decode, mime_type)?;
+            debug!("Successfully decoded content: length={}", decoded.len());
+
+            Ok(decoded)
+        }
+    }
     fn find_optimal_packet_size(
         &self,
         base_headers: &str,
@@ -502,6 +497,8 @@ impl NetworkSteganographyProcessor for Rainbow {
 
             let encoded = self.encoders.encode_mime(chunk, &mime)?;
 
+            debug!("encoded.len: {:?}", encoded.len());
+
             // 生成数据包
             let packet = if is_client {
                 self.build_http_request(&encoded, &packet_info, &mime)?
@@ -561,12 +558,11 @@ impl NetworkSteganographyProcessor for Rainbow {
         let decoded = self.decode_single_packet(&data, packet_index)?;
 
         // 解析 HTTP 头以获取包信息
-        let content = unsafe { String::from_utf8_unchecked(data.clone()) };
         let mut total_packets = None;
         let mut expected_length = 0;
 
         // 检查是否为响应
-        let is_response = content.starts_with("HTTP/1.1");
+        let is_response = data.starts_with(b"HTTP/1.1");
 
         // 验证请求/响应类型与 is_client 是否匹配
         if is_client {
@@ -585,7 +581,11 @@ impl NetworkSteganographyProcessor for Rainbow {
 
         // 从 Cookie 中获取包信息
         let mut headers = HeaderMap::new();
-        let header_part = content.split("\r\n\r\n").next().unwrap_or("");
+
+        let split_pos = find_crlf_crlf(&data).ok_or_else(|| {
+            RainbowError::InvalidData(HTTP_CONSTANTS.error_details[3].1.to_string())
+        })?;
+        let header_part = String::from_utf8_lossy(&data[..split_pos]);
 
         for line in header_part.lines() {
             if line.to_lowercase().starts_with("cookie:") {
@@ -604,7 +604,6 @@ impl NetworkSteganographyProcessor for Rainbow {
                         expected_length = info.length;
 
                         // 验证数据包长度
-                        self.verify_length(&data, expected_length)?;
                         break;
                     }
                 }
@@ -684,7 +683,7 @@ fn add_padding_to_packet(packet: &mut Vec<u8>, padding_len: usize) -> Result<()>
     // 进行 base64 编码
     let padding = BASE64.encode(&random_bytes);
 
-    if let Some(pos) = String::from_utf8_lossy(packet).find("\r\n") {
+    if let Some(pos) = find_crlf_crlf(&packet) {
         let mut new_packet = packet[..pos].to_vec();
         new_packet.extend_from_slice(b"\r\n");
         new_packet.extend_from_slice(PADDING_HEADER.as_bytes());
@@ -702,7 +701,7 @@ fn add_padding_to_packet(packet: &mut Vec<u8>, padding_len: usize) -> Result<()>
 
 #[cfg(test)]
 mod tests {
-    use crate::EncodeResult;
+    use crate::{utils::data_find, EncodeResult};
 
     use super::*;
 
@@ -727,8 +726,7 @@ mod tests {
         let diff = target_length.abs_diff(request.len());
         assert!(diff <= 100);
 
-        let request_str = String::from_utf8_lossy(&request);
-        assert!(request_str.starts_with("GET ") || request_str.starts_with("POST "));
+        assert!(request.starts_with(b"GET ") || request.starts_with(b"POST "));
 
         debug!("500 ok");
     }
@@ -748,8 +746,8 @@ mod tests {
         let diff = target_length.abs_diff(request.len());
         assert!(diff <= 100);
 
-        let request_str = String::from_utf8_lossy(&request);
-        assert!(request_str.starts_with("GET ") || request_str.starts_with("POST "));
+        let request_str = &request;
+        assert!(request_str.starts_with(b"GET ") || request_str.starts_with(b"POST "));
 
         debug!("2000 ok");
 
@@ -761,7 +759,7 @@ mod tests {
         let diff = target_length.abs_diff(response.len());
         assert!(diff <= 100);
 
-        assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1"));
+        assert!(response.starts_with(b"HTTP/1.1"));
 
         debug!("response is {}", String::from_utf8_lossy(&response));
     }
@@ -785,17 +783,115 @@ mod tests {
     fn test_encode_write_large_data() {
         init();
         let rainbow = Rainbow::new();
-        let test_data = vec![0u8; CHUNK_SIZE * 2 + 100]; // 创建超过两个块的数据
-        let EncodeResult {
-            encoded_packets: packets,
-            expected_return_packet_lengths: lengths,
-        } = rainbow.encode_write(&test_data, true, None).unwrap();
 
-        assert_eq!(packets.len(), 3);
-        assert_eq!(lengths.len(), 3);
-        for length in lengths {
-            assert!(length >= 200 && length <= 8000);
+        // Test case 1: Data size exactly two chunks
+        let test_data_exact = vec![0u8; CHUNK_SIZE * 2];
+        let EncodeResult {
+            encoded_packets: packets_exact,
+            expected_return_packet_lengths: lengths_exact,
+        } = rainbow.encode_write(&test_data_exact, true, None).unwrap();
+        assert_eq!(
+            packets_exact.len(),
+            2,
+            "Should create exactly 2 packets for 2 chunks"
+        );
+        assert_eq!(lengths_exact.len(), 2);
+
+        // Test case 2: Data size slightly over two chunks
+        let test_data_over = vec![0u8; CHUNK_SIZE * 2 + 100];
+        let EncodeResult {
+            encoded_packets: packets_over,
+            expected_return_packet_lengths: lengths_over,
+        } = rainbow.encode_write(&test_data_over, true, None).unwrap();
+        assert_eq!(
+            packets_over.len(),
+            3,
+            "Should create 3 packets for 2 chunks + remainder"
+        );
+        assert_eq!(lengths_over.len(), 3);
+
+        // Test case 3: Data size just under three chunks
+        let test_data_under = vec![0u8; CHUNK_SIZE * 3 - 50];
+        let EncodeResult {
+            encoded_packets: packets_under,
+            expected_return_packet_lengths: _,
+        } = rainbow.encode_write(&test_data_under, true, None).unwrap();
+        assert_eq!(
+            packets_under.len(),
+            3,
+            "Should create 3 packets for almost 3 chunks"
+        );
+
+        // Verify packet contents and structure
+        for packet in &packets_over {
+            // Check HTTP headers
+
+            let body_start = data_find(packet, b"\r\n\r\n").unwrap();
+            let header = &packet[..body_start];
+
+            let header_str = String::from_utf8_lossy(header);
+            assert!(header_str.starts_with("GET ") || header_str.starts_with("POST "));
+            assert!(header_str.contains("HTTP/1.1\r\n"));
+
+            if header_str.starts_with("POST ") {
+                assert!(header_str.contains("Content-Type: "));
+                assert!(header_str.contains("Content-Length: "));
+            }
+            assert!(header_str.contains("Cookie: "));
         }
+
+        // Test case 4: Very large data
+        let test_data_large = vec![0u8; CHUNK_SIZE * 5 + 233]; // 5 chunks plus some extra
+        let EncodeResult {
+            encoded_packets: packets_large,
+            expected_return_packet_lengths: lengths_large,
+        } = rainbow.encode_write(&test_data_large, true, None).unwrap();
+        assert_eq!(packets_large.len(), 6);
+        assert_eq!(lengths_large.len(), 6);
+
+        // Verify expected return lengths
+        for length in lengths_large {
+            assert!(
+                length >= 200 && length <= 8000,
+                "Expected return length should be between 200 and 8000"
+            );
+        }
+
+        // Test case 5: Different MIME types with large data
+        let mime_types = vec!["text/html", "application/json", "application/octet-stream"];
+        for mime_type in mime_types {
+            let EncodeResult {
+                encoded_packets: packets_mime,
+                expected_return_packet_lengths: _,
+            } = rainbow
+                .encode_write(&test_data_over, true, Some(mime_type.to_string()))
+                .unwrap();
+
+            // Verify MIME type specific behavior
+            let first_packet = String::from_utf8_lossy(&packets_mime[0]);
+            if mime_type == "text/plain" || mime_type == "application/json" {
+                assert!(first_packet.contains("GET "));
+                assert!(first_packet.contains("X-Data: "));
+            } else {
+                assert!(first_packet.contains("POST "));
+                assert!(first_packet.contains(&format!("Content-Type: {}", mime_type)));
+            }
+        }
+
+        // Test case 6: Verify packet info in cookies
+        let first_packet = String::from_utf8_lossy(&packets_large[0]);
+        assert!(first_packet.contains("Cookie: "));
+        let cookie_line = first_packet
+            .lines()
+            .find(|line| line.starts_with("Cookie: "))
+            .unwrap();
+
+        // Cookie should contain packet info
+        let cookie_value = cookie_line.trim_start_matches("Cookie: ");
+        assert!(HTTP_CONSTANTS
+            .cookie_names
+            .iter()
+            .any(|&name| cookie_value.contains(name)));
     }
 
     #[test]
@@ -830,16 +926,16 @@ mod tests {
             encoded_packets: request_packets,
             expected_return_packet_lengths: _,
         } = rainbow.encode_write(test_data, true, None).unwrap();
-        let request = String::from_utf8_lossy(&request_packets[0]);
-        assert!(request.starts_with("GET ") || request.starts_with("POST "));
+        let request = &request_packets[0];
+        assert!(request.starts_with(b"GET ") || request.starts_with(b"POST "));
 
         // 测试服务器响应
         let EncodeResult {
             encoded_packets: response_packets,
             expected_return_packet_lengths: _,
         } = rainbow.encode_write(test_data, false, None).unwrap();
-        let response = String::from_utf8_lossy(&response_packets[0]);
-        assert!(response.starts_with("HTTP/1.1"));
+        let response = &response_packets[0];
+        assert!(response.starts_with(b"HTTP/1.1"));
     }
 
     #[test]
@@ -853,11 +949,11 @@ mod tests {
             encoded_packets: packets,
             expected_return_packet_lengths: _,
         } = rainbow.encode_write(test_data, true, mime_type).unwrap();
-        let packet = String::from_utf8_lossy(&packets[0]);
+        let packet = &packets[0];
 
         // 对于 text/plain，应该使用 GET 请求
-        assert!(packet.starts_with("GET "));
-        assert!(packet.contains("X-Data:"));
+        assert!(packet.starts_with(b"GET "));
+        assert!(data_find(packet, b"X-Data:").is_some());
     }
 
     #[test]
@@ -874,7 +970,7 @@ mod tests {
     }
 
     #[test]
-    fn test_full_encode_decode_cycle() {
+    fn test_encode_decode_octet() {
         init();
         let rainbow = Rainbow::new();
         let test_data = b"Hello, World!";
@@ -903,6 +999,58 @@ mod tests {
         assert_eq!(&decoded, test_data);
         assert_eq!(length, test_data.len());
         assert!(is_end);
+    }
+
+    #[test]
+    fn test_encode_decode_all_mime_types() {
+        init();
+        let rainbow = Rainbow::new();
+        let test_data = b"Hello, MIME Type Testing!";
+
+        // 获取所有支持的 MIME 类型
+        let mime_types = rainbow.encoders.get_all_mime_types();
+
+        for mime_type in mime_types {
+            debug!("Testing MIME type: {}", mime_type);
+
+            // 编码：模拟客户端发送请求
+            let EncodeResult {
+                encoded_packets: packets,
+                expected_return_packet_lengths: _lengths,
+            } = rainbow
+                .encode_write(test_data, true, Some(mime_type.to_string()))
+                .unwrap();
+
+            // 验证生成的数据包
+            let packet_str = &packets[0];
+            if mime_type == "text/plain" || mime_type == "application/json" {
+                assert!(packet_str.starts_with(b"GET "));
+                assert!(data_find(packet_str, b"X-Data:").is_some());
+            } else {
+                assert!(packet_str.starts_with(b"POST "));
+                assert!(data_find(
+                    packet_str,
+                    &format!("Content-Type: {}", mime_type).as_bytes()
+                )
+                .is_some());
+            }
+
+            // 解码：模拟服务器接收请求
+            let DecodeResult {
+                data: decoded,
+                expected_return_length: length,
+                is_read_end: is_end,
+            } = rainbow
+                .decrypt_single_read(packets[0].clone(), 0, true)
+                .unwrap();
+
+            // 验证解码结果
+            assert_eq!(&decoded, test_data, "Failed to decode {}", mime_type);
+            assert_eq!(length, test_data.len());
+            assert!(is_end);
+
+            debug!("Successfully tested MIME type: {}", mime_type);
+        }
     }
 
     #[test]

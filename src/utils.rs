@@ -15,6 +15,19 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 
 use crate::RainbowError;
 
+pub fn find_crlf(data: &[u8]) -> Option<usize> {
+    data.windows(2).position(|window| window == b"\r\n")
+}
+
+pub fn find_crlf_crlf(data: &[u8]) -> Option<usize> {
+    data.windows(4).position(|window| window == b"\r\n\r\n")
+}
+
+pub fn data_find(data: &[u8], target: &[u8]) -> Option<usize> {
+    data.windows(target.len())
+        .position(|window| window == target)
+}
+
 pub struct HttpConstants {
     pub cookie_names: &'static [&'static str],
     pub post_paths: &'static [&'static str],

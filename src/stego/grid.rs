@@ -143,7 +143,7 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
         }
     }
 
-    info!(
+    debug!(
         "Successfully decoded {} bytes from CSS Grid/Flex styles",
         bytes.len()
     );

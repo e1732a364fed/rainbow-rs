@@ -24,19 +24,28 @@ use regex;
 use crate::stego::{Encoder, Random};
 
 #[derive(Debug, Clone)]
-
 pub struct CssEncoder {
     page_title: String,
     content_text: String,
     anim_prefix: String,
     elem_prefix: String,
-    delay_one: String,
-    delay_zero: String,
+    delay_one: std::ops::Range<f32>,
+    delay_zero: std::ops::Range<f32>,
 }
 
 impl Random for CssEncoder {
     fn random() -> Self {
         let mut rng = thread_rng();
+
+        // 随机生成两个不重叠的范围
+        // delay_one 在 0.1..0.4 之间生成一个 0.1 宽度的范围
+        let one_start = rng.gen_range(0.1..0.3);
+        let delay_one = one_start..(one_start + 0.1);
+
+        // delay_zero 在 0.5..0.8 之间生成一个 0.1 宽度的范围
+        let zero_start = rng.gen_range(0.5..0.7);
+        let delay_zero = zero_start..(zero_start + 0.1);
+
         Self {
             page_title: format!(
                 "{} - {}",
@@ -52,8 +61,8 @@ impl Random for CssEncoder {
                 "elem-{}",
                 name::en::LastName().fake::<String>().to_lowercase()
             ),
-            delay_one: format!("{}s", (rng.gen_range(1..5) as f32 / 10.0)),
-            delay_zero: format!("{}s", (rng.gen_range(5..10) as f32 / 10.0)),
+            delay_one,
+            delay_zero,
         }
     }
 }
@@ -65,8 +74,8 @@ impl Default for CssEncoder {
             content_text: "Experience smooth animations and transitions.".to_string(),
             anim_prefix: "a".to_string(),
             elem_prefix: "e".to_string(),
-            delay_one: "0.1s".to_string(),
-            delay_zero: "0.2s".to_string(),
+            delay_one: 0.1..0.3,
+            delay_zero: 0.5..0.7,
         }
     }
 }
@@ -104,8 +113,8 @@ pub fn encode(
     content_text: &str,
     anim_prefix: &str,
     elem_prefix: &str,
-    delay_one: &str,
-    delay_zero: &str,
+    delay_one: &std::ops::Range<f32>,
+    delay_zero: &std::ops::Range<f32>,
 ) -> Result<Vec<u8>> {
     if data.is_empty() {
         return Ok(format!(
@@ -130,6 +139,7 @@ pub fn encode(
 
     let mut animations = Vec::new();
     let mut elements = Vec::new();
+    let mut rng = thread_rng();
 
     // Convert entire data into bit sequence
     let bits: Vec<u8> = data
@@ -143,9 +153,16 @@ pub fn encode(
         let elem_id = format!("{}{}", elem_prefix, thread_rng().gen_range(10000..100000));
 
         // Generate delay values
-        let delays: Vec<&str> = chunk_bits
+        let delays: Vec<String> = chunk_bits
             .iter()
-            .map(|&bit| if bit == 1 { delay_one } else { delay_zero })
+            .map(|&bit| {
+                let delay = if bit == 1 {
+                    rng.gen_range(delay_one.clone())
+                } else {
+                    rng.gen_range(delay_zero.clone())
+                };
+                format!("{}s", delay)
+            })
             .collect();
 
         // Create animation and element styles
@@ -222,7 +239,9 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
 
         // Collect all bits
         for time in times {
-            all_bits.push(if time.starts_with("0.1") { 1u8 } else { 0u8 });
+            // 移除 's' 后缀并解析为浮点数
+            let value = time.trim_end_matches('s').parse::<f32>().unwrap_or(0.0);
+            all_bits.push(if value < 0.4 { 1u8 } else { 0u8 });
         }
     }
 
@@ -251,35 +270,48 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
 
+    const TEST_DATA: &[u8] = b"Hello, CSS Animation Steganography!";
+
     #[test]
-    fn test_css_animation() {
-        let test_data = b"Hello, CSS Animation Steganography!";
+    fn test_encode_decode() {
         let encoded = encode(
-            test_data,
+            TEST_DATA,
             "Test Page",
             "Test content",
             "anim",
             "elem",
-            "0.1s",
-            "0.2s",
+            &(0.1..0.3),
+            &(0.5..0.7),
         )
         .unwrap();
         assert!(!encoded.is_empty());
         let decoded = decode(&encoded).unwrap();
-        assert_eq!(decoded, test_data);
+        assert_eq!(decoded, TEST_DATA);
+
+        let encoder = CssEncoder::default();
+        let encoded = encoder.encode(TEST_DATA).unwrap();
+        let decoded = encoder.decode(&encoded).unwrap();
+        assert_eq!(decoded, TEST_DATA);
+    }
+
+    #[test]
+    fn test_random() {
+        let encoder = CssEncoder::random();
+        let encoded = encoder.encode(TEST_DATA).unwrap();
+        let decoded = encoder.decode(&encoded).unwrap();
+        assert_eq!(decoded, TEST_DATA);
     }
 
     #[test]
     fn test_empty_data() {
-        let test_data = b"";
         let encoded = encode(
-            test_data,
+            b"",
             "Test Page",
             "Test content",
             "anim",
             "elem",
-            "0.1s",
-            "0.2s",
+            &(0.1..0.3),
+            &(0.5..0.7),
         )
         .unwrap();
         assert!(!encoded.is_empty());
