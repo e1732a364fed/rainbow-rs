@@ -15,7 +15,9 @@ Rainbow is a versatile HTTP steganography library that enables data hiding withi
   - XML/RSS
   - SVG Paths
   - Audio (WAV)
+  - PNG (LSB)
   - Font properties
+  - CFG (Context-Free Grammar)
   - And more...
 - Support for both client and server-side encoding
 - Automatic MIME type selection

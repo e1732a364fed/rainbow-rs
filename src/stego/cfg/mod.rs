@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
+use bytes::{BufMut, BytesMut};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::find_matching_brace;
@@ -7,7 +8,7 @@ use crate::{stego::Encoder, RainbowError, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 
-pub struct FinalProduction {
+pub struct Production {
     text: String,
 
     product_type: ProductType,
@@ -23,7 +24,8 @@ pub enum ProductType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CFG {
-    variables: HashMap<String, Vec<FinalProduction>>,
+    // 因为 需要以固定的顺序遍历变量，所以使用 BTreeMap
+    variables: BTreeMap<String, Vec<Production>>,
 }
 
 impl CFG {
@@ -230,31 +232,325 @@ impl CFG {
     }
 }
 
+impl CFG {
+    /// capacity: 4
+    pub fn cfg_example1() -> CFG {
+        let vp = vec![
+            Production {
+                text: "went ﬁshing {where}".to_string(),
+                product_type: ProductType::Replace,
+            },
+            Production {
+                text: "went bowling {where}".to_string(),
+                product_type: ProductType::Replace,
+            },
+        ];
+
+        let wp = vec![
+            Production {
+                text: "in {direction} Iowa.".to_string(),
+                product_type: ProductType::Replace,
+            },
+            Production {
+                text: "in {direction} Minnesota.".to_string(),
+                product_type: ProductType::Replace,
+            },
+        ];
+
+        let dp = vec![
+            Production {
+                text: "northern".to_string(),
+                product_type: ProductType::Plain,
+            },
+            Production {
+                text: "southern".to_string(),
+                product_type: ProductType::Plain,
+            },
+        ];
+
+        let np = vec![
+            Production {
+                text: "Fred".to_string(),
+                product_type: ProductType::Plain,
+            },
+            Production {
+                text: "Barney".to_string(),
+                product_type: ProductType::Plain,
+            },
+        ];
+
+        let start = vec![Production {
+            text: "{noun} {verb}".to_string(),
+            product_type: ProductType::Replace,
+        }];
+
+        let variables = b_tree_map! {
+            "start".to_owned() =>  start  ,
+            "noun".to_owned() =>  np  ,
+            "verb".to_owned() =>  vp  ,
+            "where".to_owned() =>  wp  ,
+            "direction".to_owned() =>  dp  ,
+        };
+
+        // Create CFG instance
+        let cfg = CFG { variables };
+
+        println!("capacity: {}", cfg.bits_capacity());
+
+        cfg
+    }
+
+    /// capacity: 32
+    pub fn cfg_example2() -> CFG {
+        let start = vec![Production {
+            text: "{SUBJECT_VERB_OBJECT}\n{DATELINE}\n{CONTENT}\n{QUOTE_INTRO} {QUOTE}".to_string(),
+            product_type: ProductType::Replace,
+        }];
+
+        let svb = vec![Production {
+            text: "{SUBJECT} {VERB} {OBJECT}".to_string(),
+            product_type: ProductType::Replace,
+        }];
+
+        // 主语
+        const SUBJECTS: [&str; 32] = [
+            "Tech giant",
+            "Local authorities",
+            "Scientists",
+            "Researchers",
+            "Industry experts",
+            "Market analysts",
+            "Government officials",
+            "Medical professionals",
+            "Environmental activists",
+            "Security researchers",
+            "Financial experts",
+            "Education leaders",
+            "Technology pioneers",
+            "Healthcare providers",
+            "Climate scientists",
+            "Policy makers",
+            "Business leaders",
+            "Innovation experts",
+            "Data scientists",
+            "AI researchers",
+            "Cybersecurity experts",
+            "Space scientists",
+            "Marine biologists",
+            "Energy researchers",
+            "Quantum physicists",
+            "Neuroscientists",
+            "Biotechnology firms",
+            "Software developers",
+            "Automotive engineers",
+            "Aerospace experts",
+            "Economic analysts",
+            "Urban planners",
+        ];
+
+        // 谓语
+        const VERBS: [&str; 16] = [
+            "reveals",
+            "launches",
+            "discovers",
+            "introduces",
+            "develops",
+            "implements",
+            "demonstrates",
+            "unveils",
+            "presents",
+            "confirms",
+            "establishes",
+            "initiates",
+            "validates",
+            "showcases",
+            "releases",
+            "publishes",
+        ];
+
+        // 宾语
+        const OBJECTS: [&str; 32] = [
+            "new findings",
+            "innovative solution",
+            "major development",
+            "groundbreaking research",
+            "revolutionary platform",
+            "cutting-edge system",
+            "advanced framework",
+            "sustainable initiative",
+            "strategic partnership",
+            "quantum breakthrough",
+            "AI-powered solution",
+            "digital transformation",
+            "research findings",
+            "technological advancement",
+            "innovative approach",
+            "sustainable solution",
+            "security protocol",
+            "efficiency improvement",
+            "market strategy",
+            "development framework",
+            "research methodology",
+            "optimization technique",
+            "implementation strategy",
+            "analytical tool",
+            "prediction model",
+            "automation system",
+            "integration platform",
+            "monitoring system",
+            "validation process",
+            "enhancement protocol",
+            "deployment strategy",
+            "scaling solution",
+        ];
+
+        const CITIES: [&str; 32] = [
+            "NEW YORK",
+            "LONDON",
+            "TOKYO",
+            "BEIJING",
+            "SAN FRANCISCO",
+            "SINGAPORE",
+            "BERLIN",
+            "PARIS",
+            "SEOUL",
+            "SYDNEY",
+            "DUBAI",
+            "TORONTO",
+            "SHANGHAI",
+            "MUMBAI",
+            "AMSTERDAM",
+            "STOCKHOLM",
+            "HONG KONG",
+            "BOSTON",
+            "TEL AVIV",
+            "ZURICH",
+            "SEATTLE",
+            "AUSTIN",
+            "BANGALORE",
+            "MUNICH",
+            "VANCOUVER",
+            "COPENHAGEN",
+            "OSLO",
+            "VIENNA",
+            "MELBOURNE",
+            "MONTREAL",
+            "GENEVA",
+            "HELSINKI",
+        ];
+
+        const CONTENT: [&str; 8] = [
+            "This breakthrough could revolutionize the industry. ",
+            "The development marks a significant milestone in the field. ",
+            "The innovation represents a major leap forward in technology. ",
+            "This discovery opens up new possibilities for future research. ",
+            "The findings suggest a paradigm shift in the industry. ",
+            "The results demonstrate unprecedented potential for growth. ",
+            "This advancement challenges existing technological limitations. ",
+            "The research reveals promising applications across sectors. ",
+        ];
+
+        const QUOTES: [&str; 8] = [
+            "\"This is just the beginning of a new era in technology.\"",
+            "\"Our findings will transform the way we approach this field.\"",
+            "\"The implications of this discovery are far-reaching.\"",
+            "\"We're excited about the potential applications of this breakthrough.\"",
+            "\"This development represents a quantum leap in our capabilities.\"",
+            "\"The results have exceeded our most optimistic expectations.\"",
+            "\"This marks a pivotal moment in our research journey.\"",
+            "\"We're just scratching the surface of what's possible.\"",
+        ];
+
+        const QUOTE_INTROS: [&str; 4] = [
+            "The lead scientist stated,",
+            "The project director commented,",
+            "The research team leader noted,",
+            "The chief investigator remarked,",
+        ];
+
+        let dates: Vec<String> = (1..=32)
+            .map(|day| format!("January {}, 2024", day))
+            .collect();
+
+        let dates: Vec<&str> = dates.iter().map(|s| s.as_str()).collect();
+
+        let variables = b_tree_map! {
+            "start".to_owned() =>  start,
+            "SUBJECT_VERB_OBJECT".to_owned() =>  svb,
+            "SUBJECT".to_owned() =>  init_plain_by_list(&SUBJECTS),
+            "VERB".to_owned() =>  init_plain_by_list(&VERBS),
+            "OBJECT".to_owned() =>  init_plain_by_list(&OBJECTS),
+            "CITY".to_owned() =>  init_plain_by_list(&CITIES),
+            "DATE".to_owned() =>  init_plain_by_list(&dates),
+            "QUOTE".to_owned() =>  init_plain_by_list(&QUOTES),
+            "QUOTE_INTRO".to_owned() =>  init_plain_by_list(&QUOTE_INTROS),
+            "CONTENT".to_owned() =>  init_plain_by_list(&CONTENT),
+            "DATELINE".to_owned() =>  init_plain_by_list(&vec!["{DATE} {CITY}"]),
+        };
+
+        // Create CFG instance
+        let cfg = CFG { variables };
+
+        println!("capacity: {}", cfg.bits_capacity());
+
+        assert_eq!(cfg.bits_capacity(), 32);
+
+        cfg
+    }
+}
+/// CFGEncoder 包装了 [`CFG`], 使其可以针对任意长度的数据进行编码
 #[derive(Debug, Clone)]
 pub struct CFGEncoder {
     cfg: CFG,
 }
 
-impl CFGEncoder {
-    pub fn new(cfg: CFG) -> Self {
-        Self { cfg }
+impl Default for CFGEncoder {
+    fn default() -> Self {
+        Self {
+            cfg: CFG::cfg_example2(),
+        }
     }
 }
 
+// impl CFGEncoder {}
+
 impl Encoder for CFGEncoder {
     fn name(&self) -> &'static str {
-        "cfg2"
+        "cfg"
     }
 
     fn get_mime_type(&self) -> &'static str {
         "text/plain"
     }
+
     fn encode(&self, data: &[u8]) -> Result<Vec<u8>> {
+        // 在直接编码时，需要要求 data 的 长度大于 capacity/8 字节
+
+        // 但是，我们在这里通过添加头部的方式来解决
+
+        // 头部 包含 数据长度, 四字节。
+        // 如果头部的四字节 还不够 capacity/8 字节，则会在头部后面再 填充 (length - capacity/8) 字节 长度的0
+
+        let data_length = data.len();
+        let capacity = self.cfg.bits_capacity();
+
+        let mut bytes_mut = BytesMut::new();
+        bytes_mut.put_u32(data_length as u32);
+
+        // 如果头部的四字节 还不够 capacity/8 字节，则会在头部后面再 填充 (length - capacity/8) 字节 长度的0
+        if capacity / 8 > 4 {
+            let padding_length = capacity / 8 - 4;
+
+            bytes_mut.extend_from_slice(&vec![0; padding_length]);
+        }
+        bytes_mut.extend_from_slice(data);
+
+        let data = bytes_mut.as_ref();
+
         let mut result = Vec::new();
         let mut current_byte_index = 0;
         let mut current_bit_index = 0;
 
-        // 当还有数据需要编码时，继续生成新句子
         while current_byte_index < data.len() {
             let mut choices = HashMap::new();
 
@@ -310,11 +606,11 @@ impl Encoder for CFGEncoder {
 
     /// 要求 capacity 必须是 2 的幂
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
-        let cs = String::from_utf8_lossy(content);
         let capacity = self.cfg.bits_capacity();
-        let mut result = Vec::new();
-
         assert!(capacity.is_power_of_two());
+
+        let cs = String::from_utf8_lossy(content);
+        let mut result = Vec::new();
 
         // 一种需要补全 单个字节内部的情况。
         // 只可能是在 capacity < 8时, 此时只有 2 和 4 两种可能
@@ -364,290 +660,41 @@ impl Encoder for CFGEncoder {
             remaining_text = &remaining_text[expanded.len()..];
         }
 
-        Ok(result)
+        // 参照 encode 的逻辑， 先从头部获取数据长度
+
+        let data_length = u32::from_be_bytes(result.as_slice()[..4].try_into().unwrap()) as usize;
+
+        let capacity_per_byte = capacity / 8;
+
+        let start_at = if capacity_per_byte > 4 {
+            capacity_per_byte
+        } else {
+            4
+        };
+
+        let result = &result[start_at..start_at + data_length];
+
+        assert_eq!(result.len(), data_length);
+
+        Ok(result.to_vec())
     }
 }
 
-pub fn init_plain_by_list(list: Vec<&str>) -> Vec<FinalProduction> {
-    list.into_iter()
-        .map(|t| FinalProduction {
+pub fn init_plain_by_list(list: &[&str]) -> Vec<Production> {
+    list.iter()
+        .map(|t| Production {
             text: t.to_string(),
             product_type: ProductType::Plain,
         })
         .collect()
 }
 
-use common_macros::hash_map;
-
-/// capacity: 4
-pub fn init_cfg_example1() -> CFG {
-    let vp = vec![
-        FinalProduction {
-            text: "went ﬁshing {where}".to_string(),
-            product_type: ProductType::Replace,
-        },
-        FinalProduction {
-            text: "went bowling {where}".to_string(),
-            product_type: ProductType::Replace,
-        },
-    ];
-
-    let wp = vec![
-        FinalProduction {
-            text: "in {direction} Iowa.".to_string(),
-            product_type: ProductType::Replace,
-        },
-        FinalProduction {
-            text: "in {direction} Minnesota.".to_string(),
-            product_type: ProductType::Replace,
-        },
-    ];
-
-    let dp = vec![
-        FinalProduction {
-            text: "northern".to_string(),
-            product_type: ProductType::Plain,
-        },
-        FinalProduction {
-            text: "southern".to_string(),
-            product_type: ProductType::Plain,
-        },
-    ];
-
-    let np = vec![
-        FinalProduction {
-            text: "Fred".to_string(),
-            product_type: ProductType::Plain,
-        },
-        FinalProduction {
-            text: "Barney".to_string(),
-            product_type: ProductType::Plain,
-        },
-    ];
-
-    let start = vec![FinalProduction {
-        text: "{noun} {verb}".to_string(),
-        product_type: ProductType::Replace,
-    }];
-
-    let variables = hash_map! {
-        "start".to_owned() =>  start  ,
-        "noun".to_owned() =>  np  ,
-        "verb".to_owned() =>  vp  ,
-        "where".to_owned() =>  wp  ,
-        "direction".to_owned() =>  dp  ,
-    };
-
-    // Create CFG instance
-    let cfg = CFG { variables };
-
-    println!("capacity: {}", cfg.bits_capacity());
-
-    cfg
-}
-
-pub fn init_cfg_example2() -> CFG {
-    let start = vec![FinalProduction {
-        text: "{SUBJECT_VERB_OBJECT}\n{DATELINE}\n{CONTENT}\n{QUOTE_INTRO} {QUOTE}".to_string(),
-        product_type: ProductType::Replace,
-    }];
-
-    let svb = vec![FinalProduction {
-        text: "{SUBJECT} {VERB} {OBJECT}".to_string(),
-        product_type: ProductType::Replace,
-    }];
-
-    // 主语
-    let subjects = vec![
-        "Tech giant",
-        "Local authorities",
-        "Scientists",
-        "Researchers",
-        "Industry experts",
-        "Market analysts",
-        "Government officials",
-        "Medical professionals",
-        "Environmental activists",
-        "Security researchers",
-        "Financial experts",
-        "Education leaders",
-        "Technology pioneers",
-        "Healthcare providers",
-        "Climate scientists",
-        "Policy makers",
-        "Business leaders",
-        "Innovation experts",
-        "Data scientists",
-        "AI researchers",
-        "Cybersecurity experts",
-        "Space scientists",
-        "Marine biologists",
-        "Energy researchers",
-        "Quantum physicists",
-        "Neuroscientists",
-        "Biotechnology firms",
-        "Software developers",
-        "Automotive engineers",
-        "Aerospace experts",
-        "Economic analysts",
-        "Urban planners",
-    ];
-
-    // 谓语
-    let verbs = vec![
-        "reveals",
-        "launches",
-        "discovers",
-        "introduces",
-        "develops",
-        "implements",
-        "demonstrates",
-        "unveils",
-        "presents",
-        "confirms",
-        "establishes",
-        "initiates",
-        "validates",
-        "showcases",
-        "releases",
-        "publishes",
-    ];
-
-    // 宾语
-    let objects = vec![
-        "new findings",
-        "innovative solution",
-        "major development",
-        "groundbreaking research",
-        "revolutionary platform",
-        "cutting-edge system",
-        "advanced framework",
-        "sustainable initiative",
-        "strategic partnership",
-        "quantum breakthrough",
-        "AI-powered solution",
-        "digital transformation",
-        "research findings",
-        "technological advancement",
-        "innovative approach",
-        "sustainable solution",
-        "security protocol",
-        "efficiency improvement",
-        "market strategy",
-        "development framework",
-        "research methodology",
-        "optimization technique",
-        "implementation strategy",
-        "analytical tool",
-        "prediction model",
-        "automation system",
-        "integration platform",
-        "monitoring system",
-        "validation process",
-        "enhancement protocol",
-        "deployment strategy",
-        "scaling solution",
-    ];
-
-    let cities = vec![
-        "NEW YORK",
-        "LONDON",
-        "TOKYO",
-        "BEIJING",
-        "SAN FRANCISCO",
-        "SINGAPORE",
-        "BERLIN",
-        "PARIS",
-        "SEOUL",
-        "SYDNEY",
-        "DUBAI",
-        "TORONTO",
-        "SHANGHAI",
-        "MUMBAI",
-        "AMSTERDAM",
-        "STOCKHOLM",
-        "HONG KONG",
-        "BOSTON",
-        "TEL AVIV",
-        "ZURICH",
-        "SEATTLE",
-        "AUSTIN",
-        "BANGALORE",
-        "MUNICH",
-        "VANCOUVER",
-        "COPENHAGEN",
-        "OSLO",
-        "VIENNA",
-        "MELBOURNE",
-        "MONTREAL",
-        "GENEVA",
-        "HELSINKI",
-    ];
-
-    let content = vec![
-        "This breakthrough could revolutionize the industry. ",
-        "The development marks a significant milestone in the field. ",
-        "The innovation represents a major leap forward in technology. ",
-        "This discovery opens up new possibilities for future research. ",
-        "The findings suggest a paradigm shift in the industry. ",
-        "The results demonstrate unprecedented potential for growth. ",
-        "This advancement challenges existing technological limitations. ",
-        "The research reveals promising applications across sectors. ",
-    ];
-
-    let quotes = vec![
-        "\"This is just the beginning of a new era in technology.\"",
-        "\"Our findings will transform the way we approach this field.\"",
-        "\"The implications of this discovery are far-reaching.\"",
-        "\"We're excited about the potential applications of this breakthrough.\"",
-        "\"This development represents a quantum leap in our capabilities.\"",
-        "\"The results have exceeded our most optimistic expectations.\"",
-        "\"This marks a pivotal moment in our research journey.\"",
-        "\"We're just scratching the surface of what's possible.\"",
-    ];
-
-    let quote_intros = vec![
-        "The lead scientist stated,",
-        "The project director commented,",
-        "The research team leader noted,",
-        "The chief investigator remarked,",
-    ];
-
-    let dates: Vec<String> = (1..=32)
-        .map(|day| format!("January {}, 2024", day))
-        .collect();
-
-    let variables = hash_map! {
-        "start".to_owned() =>  start,
-        "SUBJECT_VERB_OBJECT".to_owned() =>  svb,
-        "SUBJECT".to_owned() =>  init_plain_by_list(subjects),
-        "VERB".to_owned() =>  init_plain_by_list(verbs),
-        "OBJECT".to_owned() =>  init_plain_by_list(objects),
-        "CITY".to_owned() =>  init_plain_by_list(cities),
-        "DATE".to_owned() =>  init_plain_by_list(dates.iter().map(|s| s.as_str()).collect()),
-        "QUOTE".to_owned() =>  init_plain_by_list(quotes),
-        "QUOTE_INTRO".to_owned() =>  init_plain_by_list(quote_intros),
-        "CONTENT".to_owned() =>  init_plain_by_list(content),
-        "DATELINE".to_owned() =>  init_plain_by_list(vec!["{DATE} {CITY}"]),
-    };
-
-    // Create CFG instance
-    let cfg = CFG { variables };
-
-    println!("capacity: {}", cfg.bits_capacity());
-
-    assert_eq!(cfg.bits_capacity(), 32);
-
-    cfg
-}
+use common_macros::b_tree_map;
 
 #[cfg(test)]
 mod test {
-    use super::{init_cfg_example2, CFGEncoder};
-    use crate::stego::{
-        cfg::{init_cfg_example1, CFG},
-        Encoder,
-    };
+    use super::CFGEncoder;
+    use crate::stego::{cfg::CFG, Encoder};
     use common_macros::hash_map;
     use rand::Rng;
 
@@ -655,7 +702,7 @@ mod test {
     fn test() {
         // let terminals = HashMap::
 
-        let cfg = init_cfg_example1();
+        let cfg = CFG::cfg_example1();
 
         // Test case 1: No choices (default behavior)
         let result = cfg.expand("{start}", None);
@@ -693,7 +740,7 @@ mod test {
 
     #[test]
     fn test_reverse() {
-        let cfg = init_cfg_example1();
+        let cfg = CFG::cfg_example1();
 
         println!("all choices {:#?}", cfg.generate_all_choices());
 
@@ -732,7 +779,7 @@ mod test {
 
     #[test]
     fn test_reverse_optimized() {
-        let cfg = init_cfg_example1();
+        let cfg = CFG::cfg_example1();
 
         // 测试用例1：基本匹配
         let text1 = "Fred went ﬁshing in northern Iowa.";
@@ -799,32 +846,30 @@ mod test {
 
     #[test]
     fn test_encode_decode1() {
-        let cfg = init_cfg_example1();
+        let cfg = CFG::cfg_example1();
         test_encode_decode_for_cfg(cfg);
     }
 
     #[test]
     fn test2() {
-        let cfg = init_cfg_example2();
+        let cfg = CFG::cfg_example2();
         test_encode_decode_for_cfg(cfg);
     }
 
     #[test]
     fn test_encode_decode_large1() {
-        let cfg = init_cfg_example1();
+        let cfg = CFG::cfg_example1();
         test_encode_decode_large_for_cfg(cfg);
     }
 
     #[test]
     fn test_encode_decode_large2() {
-        let cfg = init_cfg_example2();
+        let cfg = CFG::cfg_example2();
         test_encode_decode_large_for_cfg(cfg);
     }
 
     fn test_encode_decode_for_cfg(cfg: CFG) {
-        let capacity = cfg.bits_capacity();
-
-        let encoder = CFGEncoder::new(cfg);
+        let encoder = CFGEncoder { cfg };
 
         // Test case 0: Empty data
         let empty_data = vec![];
@@ -834,7 +879,7 @@ mod test {
 
         println!("test0 ok");
 
-        if capacity <= 8 {
+        if true {
             // Test case 1: Basic encoding and decoding
             let data = vec![0b10101010];
             let encoded = encoder.encode(&data).unwrap();
@@ -848,7 +893,7 @@ mod test {
             println!("test1 ok");
         }
 
-        if capacity <= 16 {
+        if true {
             // Test case 3: Multiple bytes
             let multi_bytes = vec![0xFF, 0x00];
             let encoded = encoder.encode(&multi_bytes).unwrap();
@@ -861,7 +906,7 @@ mod test {
             println!("test3 ok");
         }
 
-        if capacity <= 24 {
+        if true {
             // Test case 3.2: Multiple bytes
             let multi_bytes = vec![0xFF, 0x00, 0xAA];
             let encoded = encoder.encode(&multi_bytes).unwrap();
@@ -871,7 +916,7 @@ mod test {
             println!("test3.2 ok");
         }
 
-        if capacity <= 32 {
+        if true {
             // Test case 4: Large data
             let large_data: Vec<u8> = (0..32).collect();
             let encoded = encoder.encode(&large_data).unwrap();
@@ -881,7 +926,7 @@ mod test {
             println!("test4 ok");
         }
 
-        if capacity <= 40 {
+        if true {
             // Test case 5: Random data
             let mut rng = rand::thread_rng();
             let random_data: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
@@ -894,7 +939,7 @@ mod test {
     }
 
     fn test_encode_decode_large_for_cfg(cfg: CFG) {
-        let encoder = CFGEncoder::new(cfg);
+        let encoder = CFGEncoder { cfg };
         // Test case 4.2: REALLY Large data
         let large_data: Vec<u8> = (0..255).collect();
         let repeated: Vec<_> = std::iter::repeat_with(|| large_data.clone())
@@ -911,8 +956,8 @@ mod test {
 
     #[test]
     fn test_encoder_capacity() {
-        let cfg = init_cfg_example1();
-        let encoder = CFGEncoder::new(cfg);
+        let cfg = CFG::cfg_example1();
+        let encoder = CFGEncoder { cfg };
 
         // Calculate theoretical capacity
         let mut total_bits = 0;
@@ -937,8 +982,8 @@ mod test {
 
     #[test]
     fn test_encode_decode_utf8() {
-        let cfg = init_cfg_example1();
-        let encoder = CFGEncoder::new(cfg);
+        let cfg = CFG::cfg_example1();
+        let encoder = CFGEncoder { cfg };
 
         // Test with data that contains UTF-8 characters when encoded
         let data = vec![0x48, 0x65, 0x6C, 0x6C, 0x6F]; // "Hello" in ASCII
@@ -953,8 +998,8 @@ mod test {
 
     #[test]
     fn test_invalid_decode() {
-        let cfg = init_cfg_example1();
-        let encoder = CFGEncoder::new(cfg);
+        let cfg = CFG::cfg_example1();
+        let encoder = CFGEncoder { cfg };
 
         // Test case 1: Invalid UTF-8 sequence
         let invalid_utf8 = vec![0xFF, 0xFF, 0xFF];
