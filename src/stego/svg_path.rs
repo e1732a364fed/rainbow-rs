@@ -153,7 +153,7 @@ pub fn encode(data: &[u8], viewbox_size: (u32, u32)) -> Result<Vec<u8>> {
         .map(|(i, &byte)| byte_to_path(byte, i + 1))
         .collect();
 
-    info!("Generated SVG path animation with {} paths", paths.len());
+    debug!("Generated SVG path animation with {} paths", paths.len());
     Ok(generate_svg_document(&paths, viewbox_size).into_bytes())
 }
 

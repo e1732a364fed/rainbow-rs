@@ -86,7 +86,7 @@ pub fn encode(data: &[u8], root_tag: &str) -> Result<Vec<u8>> {
 
     // Base64 encode data
     let encoded_data = BASE64.encode(data);
-    info!("Generated XML with CDATA length: {}", encoded_data.len());
+    debug!("Generated XML with CDATA length: {}", encoded_data.len());
 
     let result = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>

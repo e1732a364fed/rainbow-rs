@@ -21,7 +21,7 @@ use crate::{
     DecodeResult, EncodeResult, NetworkSteganographyProcessor, RainbowError, Result,
 };
 
-const CHUNK_SIZE: usize = 1024;
+const CHUNK_SIZE: usize = 256;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PacketInfo {
@@ -54,10 +54,18 @@ impl PacketInfo {
     }
 }
 
+#[derive(Debug)]
+pub struct StegoBandwidthStats {
+    pub original_size: usize,
+    pub total_packet_size: usize,
+    pub packet_count: usize,
+    pub expected_return_size: usize,
+}
+
 /// An implementation of [`NetworkSteganographyProcessor`]
 #[derive(Debug, Clone)]
 pub struct Rainbow {
-    encoders: EncodersHolder,
+    pub encoders: EncodersHolder,
 }
 
 impl Rainbow {
@@ -471,6 +479,42 @@ impl Rainbow {
 
         Ok(final_packet)
     }
+
+    pub fn analyze_bandwidth(
+        &self,
+        data: &[u8],
+        mime_type: Option<String>,
+    ) -> Result<StegoBandwidthStats> {
+        let EncodeResult {
+            encoded_packets,
+            expected_return_packet_lengths,
+        } = self.encode_write(data, true, mime_type)?;
+
+        let stats = StegoBandwidthStats {
+            original_size: data.len(),
+            total_packet_size: encoded_packets.iter().map(|p| p.len()).sum(),
+            packet_count: encoded_packets.len(),
+            expected_return_size: expected_return_packet_lengths.iter().sum(),
+        };
+
+        Ok(stats)
+    }
+
+    pub fn analyze_bandwidth_range(
+        &self,
+        sizes: &[usize],
+        mime_type: Option<String>,
+    ) -> Result<Vec<StegoBandwidthStats>> {
+        let mut results = Vec::new();
+
+        for &size in sizes {
+            let test_data = vec![0u8; size];
+            let stats = self.analyze_bandwidth(&test_data, mime_type.clone())?;
+            results.push(stats);
+        }
+
+        Ok(results)
+    }
 }
 
 impl NetworkSteganographyProcessor for Rainbow {
@@ -531,7 +575,7 @@ impl NetworkSteganographyProcessor for Rainbow {
             );
         }
 
-        info!(
+        debug!(
             "Generated {} packets for {} bytes of data",
             packets.len(),
             data.len()

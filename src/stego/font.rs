@@ -177,7 +177,7 @@ pub fn encode(
         chars.push(format!("<span class=\"v{}\">O</span>", i + 1));
     }
 
-    info!(
+    debug!(
         "Generated font variation steganography with {} characters",
         data.len()
     );

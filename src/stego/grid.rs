@@ -17,7 +17,7 @@ Suitable for hiding data in CSS stylesheets where Grid/Flex layouts are expected
 use crate::Result;
 use fake::{faker::*, Fake};
 use regex::Regex;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::stego::{Encoder, Random};
 
@@ -106,7 +106,7 @@ pub fn encode(data: &[u8], container_class: &str) -> Result<Vec<u8>> {
     }
     css.push("}".to_string());
 
-    info!("Generated CSS Grid/Flex styles with {} bytes", data.len());
+    debug!("Generated CSS Grid/Flex styles with {} bytes", data.len());
     Ok(css.join("\n").into_bytes())
 }
 

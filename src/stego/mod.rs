@@ -29,7 +29,6 @@ pub mod xml;
 
 use std::collections::{HashMap, HashSet};
 
-use dyn_clone::DynClone;
 use rand::{seq::SliceRandom, Rng};
 use tracing::debug;
 
@@ -42,7 +41,7 @@ pub trait Random {
     fn random() -> Self;
 }
 
-pub trait Encoder: std::fmt::Debug + DynClone {
+pub trait Encoder: std::fmt::Debug + dyn_clone::DynClone + Send + Sync {
     fn name(&self) -> &'static str;
     fn encode(&self, data: &[u8]) -> Result<Vec<u8>>;
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>>;

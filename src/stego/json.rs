@@ -82,7 +82,7 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
         "description": "System configuration and metadata"
     });
 
-    info!(
+    debug!(
         "Generated JSON metadata steganography with {} bytes",
         data.len()
     );
