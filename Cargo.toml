@@ -3,7 +3,7 @@ name = "rainbow"
 version = "0.1.0"
 edition = "2021"
 authors = ["e1732a364fed"]
-description = "A steganography tool that hides data in HTTP traffic"
+description = "A steganography framework"
 
 [dependencies]
 http = "0.2"
