@@ -36,8 +36,7 @@ pub struct OctetEncoder {
 
 impl Default for OctetEncoder {
     fn default() -> Self {
-        let mut key = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut key);
+        let key = [0u8; 32];
         Self {
             method: EncryptionMethod::default(),
             key,
@@ -177,9 +176,11 @@ impl Encoder for OctetEncoder {
 
         // Validate the length
         if content.len() < 17 + encrypted_len {
-            return Err(RainbowError::InvalidData(
-                "Content shorter than expected".to_string(),
-            ));
+            return Err(RainbowError::InvalidData(format!(
+                "Content shorter than expected {} < {}",
+                content.len(),
+                17 + encrypted_len
+            )));
         }
 
         // Extract the encrypted data
@@ -258,8 +259,7 @@ mod tests {
     #[test]
     fn test_encode_decode_aes() {
         init();
-        let key = get_test_key();
-        let encoder = OctetEncoder::new(EncryptionMethod::Aes, key);
+        let encoder = OctetEncoder::random();
 
         // 测试空数据
         let empty_data = b"";

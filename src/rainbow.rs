@@ -162,6 +162,7 @@ impl Rainbow {
         200 // 默认返回 200
     }
 
+    /// The function do not encode data
     fn build_http_request(
         &self,
         data: &[u8],
@@ -178,27 +179,27 @@ impl Rainbow {
         let path = paths[rand::thread_rng().gen_range(0..paths.len())];
 
         let mut headers = String::new();
-        // 确保请求行是第一行
         headers.push_str(&format!("{} {} HTTP/1.1\r\n", method, path));
-        // 然后添加其他头部
         headers.push_str(&self.build_common_headers(true));
         headers.push_str(&format!("Accept: {}\r\n", self.get_accept_header(path)));
         headers.push_str(&self.build_cookie_header(packet_info, true)?);
 
         if method == "GET" {
             headers.push_str(&format!("X-Data: {}\r\n", BASE64.encode(data)));
-            headers.push_str("\r\n"); // 确保 GET 请求也有空行
-        } else {
-            let encoded = self.encoders.encode_mime(data, mime_type)?;
-            headers.push_str(&format!("Content-Type: {}\r\n", mime_type));
-            headers.push_str(&format!("Content-Length: {}\r\n", encoded.len()));
             headers.push_str("\r\n");
-            headers.push_str(&String::from_utf8_lossy(&encoded));
-        }
+            Ok(headers.into_bytes())
+        } else {
+            headers.push_str(&format!("Content-Type: {}\r\n", mime_type));
+            headers.push_str(&format!("Content-Length: {}\r\n", data.len()));
+            headers.push_str("\r\n");
 
-        Ok(headers.into_bytes())
+            let mut v = headers.into_bytes();
+            v.extend_from_slice(data);
+            Ok(v)
+        }
     }
 
+    /// The function do not encode data
     fn build_http_response(
         &self,
         data: &[u8],
@@ -206,8 +207,6 @@ impl Rainbow {
         mime_type: &str,
         _status_code: u16,
     ) -> Result<Vec<u8>> {
-        let encoded = self.encoders.encode_mime(data, mime_type)?;
-
         let mut headers = String::new();
         // 确保响应行是第一行
         headers.push_str(&format!(
@@ -217,17 +216,17 @@ impl Rainbow {
         // 然后添加其他头部
         headers.push_str(&self.build_common_headers(false));
         headers.push_str(&format!("Content-Type: {}\r\n", mime_type));
-        headers.push_str(&format!("Content-Length: {}\r\n", encoded.len()));
+        headers.push_str(&format!("Content-Length: {}\r\n", data.len()));
         headers.push_str(&self.build_cookie_header(packet_info, false)?);
         headers.push_str("\r\n");
 
         let mut response = headers.into_bytes();
-        response.extend_from_slice(&encoded);
+        response.extend_from_slice(&data);
         Ok(response)
     }
 
     fn decode_single_packet(&self, packet: &[u8], packet_index: usize) -> Result<Vec<u8>> {
-        let content = String::from_utf8_lossy(packet);
+        let content = unsafe { String::from_utf8_unchecked(packet.to_vec()) };
         let (header, body) = content.split_once("\r\n\r\n").ok_or_else(|| {
             RainbowError::InvalidData(HTTP_CONSTANTS.error_details[3].1.to_string())
         })?;
@@ -496,15 +495,18 @@ impl NetworkSteganographyProcessor for Rainbow {
 
         for (i, chunk) in chunks.iter().enumerate() {
             let packet_info = PacketInfo::new(i, total_chunks, chunk.len());
+
             let mime = mime_type
                 .clone()
                 .unwrap_or_else(|| self.encoders.get_random_mime_type());
 
+            let encoded = self.encoders.encode_mime(chunk, &mime)?;
+
             // 生成数据包
             let packet = if is_client {
-                self.build_http_request(chunk, &packet_info, &mime)?
+                self.build_http_request(&encoded, &packet_info, &mime)?
             } else {
-                self.build_http_response(chunk, &packet_info, &mime, 200)?
+                self.build_http_response(&encoded, &packet_info, &mime, 200)?
             };
 
             // 生成预期的返回包长度
@@ -524,7 +526,7 @@ impl NetworkSteganographyProcessor for Rainbow {
             expected_lengths.push(expected_length);
 
             debug!(
-                "Generated packet {}/{}: {} bytes, expecting response of {} bytes",
+                "Generated packet {}/{} of {} bytes, expecting response of {} bytes",
                 i + 1,
                 total_chunks,
                 pl,
@@ -559,7 +561,7 @@ impl NetworkSteganographyProcessor for Rainbow {
         let decoded = self.decode_single_packet(&data, packet_index)?;
 
         // 解析 HTTP 头以获取包信息
-        let content = String::from_utf8_lossy(&data);
+        let content = unsafe { String::from_utf8_unchecked(data.clone()) };
         let mut total_packets = None;
         let mut expected_length = 0;
 
