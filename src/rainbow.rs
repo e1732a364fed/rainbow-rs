@@ -10,8 +10,8 @@
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::Utc;
+use http::header::{HeaderMap, HeaderValue, COOKIE, SET_COOKIE};
 use rand::Rng;
-use reqwest::header::{HeaderMap, HeaderValue, COOKIE, SET_COOKIE};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 

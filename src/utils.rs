@@ -10,8 +10,8 @@ The utilities here are designed to be reusable components that simplify
 common programming tasks throughout the application.
 */
 
+use http::header::{HeaderMap, HeaderName, HeaderValue};
 use rand::{distributions::Alphanumeric, Rng};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 
 use crate::RainbowError;
 
