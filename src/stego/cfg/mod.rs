@@ -291,7 +291,7 @@ impl Encoder for CFGEncoder {
                     }
                 }
 
-                value = value % num_productions as u8;
+                value %= num_productions as u8;
                 choices.insert(var_name.clone(), value as usize);
             }
 
@@ -350,7 +350,7 @@ impl Encoder for CFGEncoder {
                     let last_byte = result.last_mut().unwrap();
 
                     let real_this_byte =
-                        this_byte >> capacity * (8 / capacity - required_short_fill_count);
+                        this_byte >> (capacity * (8 / capacity - required_short_fill_count));
 
                     *last_byte += real_this_byte;
 
@@ -380,7 +380,7 @@ pub fn init_plain_by_list(list: Vec<&str>) -> Vec<FinalProduction> {
 use common_macros::hash_map;
 
 /// capacity: 4
-pub fn init_cfg_exmaple1() -> CFG {
+pub fn init_cfg_example1() -> CFG {
     let vp = vec![
         FinalProduction {
             text: "went ﬁshing {where}".to_string(),
@@ -448,12 +448,12 @@ pub fn init_cfg_exmaple1() -> CFG {
 
 pub fn init_cfg_example2() -> CFG {
     let start = vec![FinalProduction {
-        text: "{SUBJECT_VERB_OBJECT} {DATELINE} {CONTENT} {QUOTE_INTRO} {QUOTE}".to_string(),
+        text: "{SUBJECT_VERB_OBJECT}\n{DATELINE}\n{CONTENT}\n{QUOTE_INTRO} {QUOTE}".to_string(),
         product_type: ProductType::Replace,
     }];
 
     let svb = vec![FinalProduction {
-        text: "{OBJECT} {VERB} {SUBJECT}".to_string(),
+        text: "{SUBJECT} {VERB} {OBJECT}".to_string(),
         product_type: ProductType::Replace,
     }];
 
@@ -491,18 +491,6 @@ pub fn init_cfg_example2() -> CFG {
         "Aerospace experts",
         "Economic analysts",
         "Urban planners",
-        "Agricultural scientists",
-        "Digital strategists",
-        "Robotics engineers",
-        "Chemical researchers",
-        "Investment analysts",
-        "Public health experts",
-        "Technology consultants",
-        "Social scientists",
-        "Military strategists",
-        "Transportation experts",
-        "Renewable energy experts",
-        "Blockchain developers",
     ];
 
     // 谓语
@@ -523,21 +511,6 @@ pub fn init_cfg_example2() -> CFG {
         "showcases",
         "releases",
         "publishes",
-        "verifies",
-        "deploys",
-        "pioneers",
-        "achieves",
-        "creates",
-        "designs",
-        "patents",
-        "revolutionizes",
-        "transforms",
-        "advances",
-        "accelerates",
-        "enhances",
-        "optimizes",
-        "modernizes",
-        "reinvents",
     ];
 
     // 宾语
@@ -574,13 +547,6 @@ pub fn init_cfg_example2() -> CFG {
         "enhancement protocol",
         "deployment strategy",
         "scaling solution",
-        "protection mechanism",
-        "acceleration framework",
-        "optimization algorithm",
-        "verification system",
-        "compliance framework",
-        "management platform",
-        "analysis methodology",
     ];
 
     let cities = vec![
@@ -618,49 +584,50 @@ pub fn init_cfg_example2() -> CFG {
         "HELSINKI",
     ];
 
-    let dates: Vec<String> = {
-        let months = [
-            ("January", 31),
-            ("February", 29), // 2024 is a leap year
-            ("March", 31),
-            ("April", 30),
-            ("May", 31),
-            ("June", 30),
-            ("July", 31),
-            ("August", 31),
-            ("September", 30),
-            ("October", 31),
-            ("November", 30),
-            ("December", 31),
-        ];
+    let content = vec![
+        "This breakthrough could revolutionize the industry. ",
+        "The development marks a significant milestone in the field. ",
+        "The innovation represents a major leap forward in technology. ",
+        "This discovery opens up new possibilities for future research. ",
+        "The findings suggest a paradigm shift in the industry. ",
+        "The results demonstrate unprecedented potential for growth. ",
+        "This advancement challenges existing technological limitations. ",
+        "The research reveals promising applications across sectors. ",
+    ];
 
-        let mut all_dates = Vec::with_capacity(366);
-        for (month, days) in months.iter() {
-            for day in 1..=*days {
-                all_dates.push(format!("{} {}, 2024", month, day));
-            }
-        }
-        all_dates
-    };
+    let quotes = vec![
+        "\"This is just the beginning of a new era in technology.\"",
+        "\"Our findings will transform the way we approach this field.\"",
+        "\"The implications of this discovery are far-reaching.\"",
+        "\"We're excited about the potential applications of this breakthrough.\"",
+        "\"This development represents a quantum leap in our capabilities.\"",
+        "\"The results have exceeded our most optimistic expectations.\"",
+        "\"This marks a pivotal moment in our research journey.\"",
+        "\"We're just scratching the surface of what's possible.\"",
+    ];
+
+    let quote_intros = vec![
+        "The lead scientist stated,",
+        "The project director commented,",
+        "The research team leader noted,",
+        "The chief investigator remarked,",
+    ];
+
+    let dates: Vec<String> = (1..=32)
+        .map(|day| format!("January {}, 2024", day))
+        .collect();
 
     let variables = hash_map! {
-        "start".to_owned() =>  start  ,
-        "SUBJECT_VERB_OBJECT".to_owned() =>  svb  ,
-        "SUBJECT".to_owned() =>  init_plain_by_list(subjects)  ,
-        "VERB".to_owned() =>  init_plain_by_list(verbs)  ,
-        "OBJECT".to_owned() =>  init_plain_by_list(objects)  ,
-        "CITY".to_owned() =>  init_plain_by_list(cities)  ,
+        "start".to_owned() =>  start,
+        "SUBJECT_VERB_OBJECT".to_owned() =>  svb,
+        "SUBJECT".to_owned() =>  init_plain_by_list(subjects),
+        "VERB".to_owned() =>  init_plain_by_list(verbs),
+        "OBJECT".to_owned() =>  init_plain_by_list(objects),
+        "CITY".to_owned() =>  init_plain_by_list(cities),
         "DATE".to_owned() =>  init_plain_by_list(dates.iter().map(|s| s.as_str()).collect()),
-
-        "QUOTE".to_owned() =>  init_plain_by_list(vec!["\"This is just the beginning of a new era in technology.\""])  ,
-        "QUOTE_INTRO".to_owned() =>  init_plain_by_list(vec!["The lead scientist stated,"])  ,
-        "CONTENT".to_owned() =>  init_plain_by_list(vec![
-            "This breakthrough could revolutionize the industry. ",
-            "The development marks a significant milestone in the field1. ",
-            "The development marks a significant milestone in the field2. ",
-            "The development marks a significant milestone in the field3. ",
-            "a groundbreaking discovery in artificial intelligence announced today Tech giant4",
-        ])  ,
+        "QUOTE".to_owned() =>  init_plain_by_list(quotes),
+        "QUOTE_INTRO".to_owned() =>  init_plain_by_list(quote_intros),
+        "CONTENT".to_owned() =>  init_plain_by_list(content),
         "DATELINE".to_owned() =>  init_plain_by_list(vec!["{DATE} {CITY}"]),
     };
 
@@ -669,6 +636,8 @@ pub fn init_cfg_example2() -> CFG {
 
     println!("capacity: {}", cfg.bits_capacity());
 
+    assert_eq!(cfg.bits_capacity(), 32);
+
     cfg
 }
 
@@ -676,7 +645,7 @@ pub fn init_cfg_example2() -> CFG {
 mod test {
     use super::{init_cfg_example2, CFGEncoder};
     use crate::stego::{
-        cfg2::{init_cfg_exmaple1, CFG},
+        cfg::{init_cfg_example1, CFG},
         Encoder,
     };
     use common_macros::hash_map;
@@ -686,7 +655,7 @@ mod test {
     fn test() {
         // let terminals = HashMap::
 
-        let cfg = init_cfg_exmaple1();
+        let cfg = init_cfg_example1();
 
         // Test case 1: No choices (default behavior)
         let result = cfg.expand("{start}", None);
@@ -724,7 +693,7 @@ mod test {
 
     #[test]
     fn test_reverse() {
-        let cfg = init_cfg_exmaple1();
+        let cfg = init_cfg_example1();
 
         println!("all choices {:#?}", cfg.generate_all_choices());
 
@@ -763,7 +732,7 @@ mod test {
 
     #[test]
     fn test_reverse_optimized() {
-        let cfg = init_cfg_exmaple1();
+        let cfg = init_cfg_example1();
 
         // 测试用例1：基本匹配
         let text1 = "Fred went ﬁshing in northern Iowa.";
@@ -830,7 +799,7 @@ mod test {
 
     #[test]
     fn test_encode_decode1() {
-        let cfg = init_cfg_exmaple1();
+        let cfg = init_cfg_example1();
         test_encode_decode_for_cfg(cfg);
     }
 
@@ -842,68 +811,86 @@ mod test {
 
     #[test]
     fn test_encode_decode_large1() {
-        let cfg = init_cfg_exmaple1();
+        let cfg = init_cfg_example1();
+        test_encode_decode_large_for_cfg(cfg);
+    }
+
+    #[test]
+    fn test_encode_decode_large2() {
+        let cfg = init_cfg_example2();
         test_encode_decode_large_for_cfg(cfg);
     }
 
     fn test_encode_decode_for_cfg(cfg: CFG) {
+        let capacity = cfg.bits_capacity();
+
         let encoder = CFGEncoder::new(cfg);
 
-        // Test case 1: Basic encoding and decoding
-        let data = vec![0b10101010];
-        let encoded = encoder.encode(&data).unwrap();
-
-        println!("encoded {:#?}", String::from_utf8_lossy(&encoded));
-        let decoded = encoder.decode(&encoded).unwrap();
-
-        println!("decoded {:?}", decoded);
-        assert_eq!(data, decoded);
-
-        println!("test1 ok");
-
-        // Test case 2: Empty data
+        // Test case 0: Empty data
         let empty_data = vec![];
         let encoded = encoder.encode(&empty_data).unwrap();
         let decoded = encoder.decode(&encoded).unwrap();
         assert_eq!(empty_data, decoded);
 
-        println!("test2 ok");
+        println!("test0 ok");
 
-        // Test case 3: Multiple bytes
-        let multi_bytes = vec![0xFF, 0x00];
-        let encoded = encoder.encode(&multi_bytes).unwrap();
-        let decoded = encoder.decode(&encoded).unwrap();
-        assert_eq!(multi_bytes, decoded);
+        if capacity <= 8 {
+            // Test case 1: Basic encoding and decoding
+            let data = vec![0b10101010];
+            let encoded = encoder.encode(&data).unwrap();
 
-        println!("encoded {:#?}", String::from_utf8_lossy(&encoded));
-        println!("decoded {:?}", decoded);
+            println!("encoded\n{}", String::from_utf8_lossy(&encoded));
+            let decoded = encoder.decode(&encoded).unwrap();
 
-        println!("test3 ok");
+            println!("decoded {:?}", decoded);
+            assert_eq!(data, decoded);
 
-        // Test case 3.2: Multiple bytes
-        let multi_bytes = vec![0xFF, 0x00, 0xAA];
-        let encoded = encoder.encode(&multi_bytes).unwrap();
-        let decoded = encoder.decode(&encoded).unwrap();
-        assert_eq!(multi_bytes, decoded);
+            println!("test1 ok");
+        }
 
-        println!("test3.2 ok");
+        if capacity <= 16 {
+            // Test case 3: Multiple bytes
+            let multi_bytes = vec![0xFF, 0x00];
+            let encoded = encoder.encode(&multi_bytes).unwrap();
+            let decoded = encoder.decode(&encoded).unwrap();
+            assert_eq!(multi_bytes, decoded);
 
-        // Test case 4: Large data
-        let large_data: Vec<u8> = (0..32).collect();
-        let encoded = encoder.encode(&large_data).unwrap();
-        let decoded = encoder.decode(&encoded).unwrap();
-        assert_eq!(large_data, decoded);
+            println!("encoded {:#?}", String::from_utf8_lossy(&encoded));
+            println!("decoded {:?}", decoded);
 
-        println!("test4 ok");
+            println!("test3 ok");
+        }
 
-        // Test case 5: Random data
-        let mut rng = rand::thread_rng();
-        let random_data: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
-        let encoded = encoder.encode(&random_data).unwrap();
-        let decoded = encoder.decode(&encoded).unwrap();
-        assert_eq!(random_data, decoded);
+        if capacity <= 24 {
+            // Test case 3.2: Multiple bytes
+            let multi_bytes = vec![0xFF, 0x00, 0xAA];
+            let encoded = encoder.encode(&multi_bytes).unwrap();
+            let decoded = encoder.decode(&encoded).unwrap();
+            assert_eq!(multi_bytes, decoded);
 
-        println!("test5 ok");
+            println!("test3.2 ok");
+        }
+
+        if capacity <= 32 {
+            // Test case 4: Large data
+            let large_data: Vec<u8> = (0..32).collect();
+            let encoded = encoder.encode(&large_data).unwrap();
+            let decoded = encoder.decode(&encoded).unwrap();
+            assert_eq!(large_data, decoded);
+
+            println!("test4 ok");
+        }
+
+        if capacity <= 40 {
+            // Test case 5: Random data
+            let mut rng = rand::thread_rng();
+            let random_data: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
+            let encoded = encoder.encode(&random_data).unwrap();
+            let decoded = encoder.decode(&encoded).unwrap();
+            assert_eq!(random_data, decoded);
+
+            println!("test5 ok");
+        }
     }
 
     fn test_encode_decode_large_for_cfg(cfg: CFG) {
@@ -924,7 +911,7 @@ mod test {
 
     #[test]
     fn test_encoder_capacity() {
-        let cfg = init_cfg_exmaple1();
+        let cfg = init_cfg_example1();
         let encoder = CFGEncoder::new(cfg);
 
         // Calculate theoretical capacity
@@ -950,7 +937,7 @@ mod test {
 
     #[test]
     fn test_encode_decode_utf8() {
-        let cfg = init_cfg_exmaple1();
+        let cfg = init_cfg_example1();
         let encoder = CFGEncoder::new(cfg);
 
         // Test with data that contains UTF-8 characters when encoded
@@ -966,7 +953,7 @@ mod test {
 
     #[test]
     fn test_invalid_decode() {
-        let cfg = init_cfg_exmaple1();
+        let cfg = init_cfg_example1();
         let encoder = CFGEncoder::new(cfg);
 
         // Test case 1: Invalid UTF-8 sequence

@@ -15,7 +15,7 @@
  */
 
 pub mod audio;
-pub mod cfg2;
+pub mod cfg;
 pub mod css;
 pub mod font;
 pub mod grid;
