@@ -368,84 +368,325 @@ impl Encoder for CFGEncoder {
     }
 }
 
+pub fn init_plain_by_list(list: Vec<&str>) -> Vec<FinalProduction> {
+    list.into_iter()
+        .map(|t| FinalProduction {
+            text: t.to_string(),
+            product_type: ProductType::Plain,
+        })
+        .collect()
+}
+
+use common_macros::hash_map;
+
+/// capacity: 4
+pub fn init_cfg_exmaple1() -> CFG {
+    let vp = vec![
+        FinalProduction {
+            text: "went ﬁshing {where}".to_string(),
+            product_type: ProductType::Replace,
+        },
+        FinalProduction {
+            text: "went bowling {where}".to_string(),
+            product_type: ProductType::Replace,
+        },
+    ];
+
+    let wp = vec![
+        FinalProduction {
+            text: "in {direction} Iowa.".to_string(),
+            product_type: ProductType::Replace,
+        },
+        FinalProduction {
+            text: "in {direction} Minnesota.".to_string(),
+            product_type: ProductType::Replace,
+        },
+    ];
+
+    let dp = vec![
+        FinalProduction {
+            text: "northern".to_string(),
+            product_type: ProductType::Plain,
+        },
+        FinalProduction {
+            text: "southern".to_string(),
+            product_type: ProductType::Plain,
+        },
+    ];
+
+    let np = vec![
+        FinalProduction {
+            text: "Fred".to_string(),
+            product_type: ProductType::Plain,
+        },
+        FinalProduction {
+            text: "Barney".to_string(),
+            product_type: ProductType::Plain,
+        },
+    ];
+
+    let start = vec![FinalProduction {
+        text: "{noun} {verb}".to_string(),
+        product_type: ProductType::Replace,
+    }];
+
+    let variables = hash_map! {
+        "start".to_owned() =>  start  ,
+        "noun".to_owned() =>  np  ,
+        "verb".to_owned() =>  vp  ,
+        "where".to_owned() =>  wp  ,
+        "direction".to_owned() =>  dp  ,
+    };
+
+    // Create CFG instance
+    let cfg = CFG { variables };
+
+    println!("capacity: {}", cfg.bits_capacity());
+
+    cfg
+}
+
+pub fn init_cfg_example2() -> CFG {
+    let start = vec![FinalProduction {
+        text: "{SUBJECT_VERB_OBJECT} {DATELINE} {CONTENT} {QUOTE_INTRO} {QUOTE}".to_string(),
+        product_type: ProductType::Replace,
+    }];
+
+    let svb = vec![FinalProduction {
+        text: "{OBJECT} {VERB} {SUBJECT}".to_string(),
+        product_type: ProductType::Replace,
+    }];
+
+    // 主语
+    let subjects = vec![
+        "Tech giant",
+        "Local authorities",
+        "Scientists",
+        "Researchers",
+        "Industry experts",
+        "Market analysts",
+        "Government officials",
+        "Medical professionals",
+        "Environmental activists",
+        "Security researchers",
+        "Financial experts",
+        "Education leaders",
+        "Technology pioneers",
+        "Healthcare providers",
+        "Climate scientists",
+        "Policy makers",
+        "Business leaders",
+        "Innovation experts",
+        "Data scientists",
+        "AI researchers",
+        "Cybersecurity experts",
+        "Space scientists",
+        "Marine biologists",
+        "Energy researchers",
+        "Quantum physicists",
+        "Neuroscientists",
+        "Biotechnology firms",
+        "Software developers",
+        "Automotive engineers",
+        "Aerospace experts",
+        "Economic analysts",
+        "Urban planners",
+        "Agricultural scientists",
+        "Digital strategists",
+        "Robotics engineers",
+        "Chemical researchers",
+        "Investment analysts",
+        "Public health experts",
+        "Technology consultants",
+        "Social scientists",
+        "Military strategists",
+        "Transportation experts",
+        "Renewable energy experts",
+        "Blockchain developers",
+    ];
+
+    // 谓语
+    let verbs = vec![
+        "reveals",
+        "launches",
+        "discovers",
+        "introduces",
+        "develops",
+        "implements",
+        "demonstrates",
+        "unveils",
+        "presents",
+        "confirms",
+        "establishes",
+        "initiates",
+        "validates",
+        "showcases",
+        "releases",
+        "publishes",
+        "verifies",
+        "deploys",
+        "pioneers",
+        "achieves",
+        "creates",
+        "designs",
+        "patents",
+        "revolutionizes",
+        "transforms",
+        "advances",
+        "accelerates",
+        "enhances",
+        "optimizes",
+        "modernizes",
+        "reinvents",
+    ];
+
+    // 宾语
+    let objects = vec![
+        "new findings",
+        "innovative solution",
+        "major development",
+        "groundbreaking research",
+        "revolutionary platform",
+        "cutting-edge system",
+        "advanced framework",
+        "sustainable initiative",
+        "strategic partnership",
+        "quantum breakthrough",
+        "AI-powered solution",
+        "digital transformation",
+        "research findings",
+        "technological advancement",
+        "innovative approach",
+        "sustainable solution",
+        "security protocol",
+        "efficiency improvement",
+        "market strategy",
+        "development framework",
+        "research methodology",
+        "optimization technique",
+        "implementation strategy",
+        "analytical tool",
+        "prediction model",
+        "automation system",
+        "integration platform",
+        "monitoring system",
+        "validation process",
+        "enhancement protocol",
+        "deployment strategy",
+        "scaling solution",
+        "protection mechanism",
+        "acceleration framework",
+        "optimization algorithm",
+        "verification system",
+        "compliance framework",
+        "management platform",
+        "analysis methodology",
+    ];
+
+    let cities = vec![
+        "NEW YORK",
+        "LONDON",
+        "TOKYO",
+        "BEIJING",
+        "SAN FRANCISCO",
+        "SINGAPORE",
+        "BERLIN",
+        "PARIS",
+        "SEOUL",
+        "SYDNEY",
+        "DUBAI",
+        "TORONTO",
+        "SHANGHAI",
+        "MUMBAI",
+        "AMSTERDAM",
+        "STOCKHOLM",
+        "HONG KONG",
+        "BOSTON",
+        "TEL AVIV",
+        "ZURICH",
+        "SEATTLE",
+        "AUSTIN",
+        "BANGALORE",
+        "MUNICH",
+        "VANCOUVER",
+        "COPENHAGEN",
+        "OSLO",
+        "VIENNA",
+        "MELBOURNE",
+        "MONTREAL",
+        "GENEVA",
+        "HELSINKI",
+    ];
+
+    let dates: Vec<String> = {
+        let months = [
+            ("January", 31),
+            ("February", 29), // 2024 is a leap year
+            ("March", 31),
+            ("April", 30),
+            ("May", 31),
+            ("June", 30),
+            ("July", 31),
+            ("August", 31),
+            ("September", 30),
+            ("October", 31),
+            ("November", 30),
+            ("December", 31),
+        ];
+
+        let mut all_dates = Vec::with_capacity(366);
+        for (month, days) in months.iter() {
+            for day in 1..=*days {
+                all_dates.push(format!("{} {}, 2024", month, day));
+            }
+        }
+        all_dates
+    };
+
+    let variables = hash_map! {
+        "start".to_owned() =>  start  ,
+        "SUBJECT_VERB_OBJECT".to_owned() =>  svb  ,
+        "SUBJECT".to_owned() =>  init_plain_by_list(subjects)  ,
+        "VERB".to_owned() =>  init_plain_by_list(verbs)  ,
+        "OBJECT".to_owned() =>  init_plain_by_list(objects)  ,
+        "CITY".to_owned() =>  init_plain_by_list(cities)  ,
+        "DATE".to_owned() =>  init_plain_by_list(dates.iter().map(|s| s.as_str()).collect()),
+
+        "QUOTE".to_owned() =>  init_plain_by_list(vec!["\"This is just the beginning of a new era in technology.\""])  ,
+        "QUOTE_INTRO".to_owned() =>  init_plain_by_list(vec!["The lead scientist stated,"])  ,
+        "CONTENT".to_owned() =>  init_plain_by_list(vec![
+            "This breakthrough could revolutionize the industry. ",
+            "The development marks a significant milestone in the field1. ",
+            "The development marks a significant milestone in the field2. ",
+            "The development marks a significant milestone in the field3. ",
+            "a groundbreaking discovery in artificial intelligence announced today Tech giant4",
+        ])  ,
+        "DATELINE".to_owned() =>  init_plain_by_list(vec!["{DATE} {CITY}"]),
+    };
+
+    // Create CFG instance
+    let cfg = CFG { variables };
+
+    println!("capacity: {}", cfg.bits_capacity());
+
+    cfg
+}
+
 #[cfg(test)]
 mod test {
-    use super::{CFGEncoder, FinalProduction, ProductType};
-    use crate::stego::{cfg2::CFG, Encoder};
+    use super::{init_cfg_example2, CFGEncoder};
+    use crate::stego::{
+        cfg2::{init_cfg_exmaple1, CFG},
+        Encoder,
+    };
     use common_macros::hash_map;
     use rand::Rng;
-
-    fn init_cfg() -> CFG {
-        let vp = vec![
-            FinalProduction {
-                text: "went ﬁshing {where}".to_string(),
-                product_type: ProductType::Replace,
-            },
-            FinalProduction {
-                text: "went bowling {where}".to_string(),
-                product_type: ProductType::Replace,
-            },
-        ];
-
-        let wp = vec![
-            FinalProduction {
-                text: "in {direction} Iowa.".to_string(),
-                product_type: ProductType::Replace,
-            },
-            FinalProduction {
-                text: "in {direction} Minnesota.".to_string(),
-                product_type: ProductType::Replace,
-            },
-        ];
-
-        let dp = vec![
-            FinalProduction {
-                text: "northern".to_string(),
-                product_type: ProductType::Plain,
-            },
-            FinalProduction {
-                text: "southern".to_string(),
-                product_type: ProductType::Plain,
-            },
-        ];
-
-        let np = vec![
-            FinalProduction {
-                text: "Fred".to_string(),
-                product_type: ProductType::Plain,
-            },
-            FinalProduction {
-                text: "Barney".to_string(),
-                product_type: ProductType::Plain,
-            },
-        ];
-
-        let start = vec![FinalProduction {
-            text: "{noun} {verb}".to_string(),
-            product_type: ProductType::Replace,
-        }];
-
-        let variables = hash_map! {
-            "start".to_owned() =>  start  ,
-            "noun".to_owned() =>  np  ,
-            "verb".to_owned() =>  vp  ,
-            "where".to_owned() =>  wp  ,
-            "direction".to_owned() =>  dp  ,
-        };
-
-        // Create CFG instance
-        let cfg = CFG { variables };
-
-        println!("capacity: {}", cfg.bits_capacity());
-
-        cfg
-    }
 
     #[test]
     fn test() {
         // let terminals = HashMap::
 
-        let cfg = init_cfg();
+        let cfg = init_cfg_exmaple1();
 
         // Test case 1: No choices (default behavior)
         let result = cfg.expand("{start}", None);
@@ -483,7 +724,7 @@ mod test {
 
     #[test]
     fn test_reverse() {
-        let cfg = init_cfg();
+        let cfg = init_cfg_exmaple1();
 
         println!("all choices {:#?}", cfg.generate_all_choices());
 
@@ -522,7 +763,7 @@ mod test {
 
     #[test]
     fn test_reverse_optimized() {
-        let cfg = init_cfg();
+        let cfg = init_cfg_exmaple1();
 
         // 测试用例1：基本匹配
         let text1 = "Fred went ﬁshing in northern Iowa.";
@@ -589,14 +830,19 @@ mod test {
 
     #[test]
     fn test_encode_decode1() {
-        let cfg = init_cfg();
+        let cfg = init_cfg_exmaple1();
         test_encode_decode_for_cfg(cfg);
     }
 
     #[test]
+    fn test2() {
+        let cfg = init_cfg_example2();
+        test_encode_decode_for_cfg(cfg);
+    }
 
+    #[test]
     fn test_encode_decode_large1() {
-        let cfg = init_cfg();
+        let cfg = init_cfg_exmaple1();
         test_encode_decode_large_for_cfg(cfg);
     }
 
@@ -678,7 +924,7 @@ mod test {
 
     #[test]
     fn test_encoder_capacity() {
-        let cfg = init_cfg();
+        let cfg = init_cfg_exmaple1();
         let encoder = CFGEncoder::new(cfg);
 
         // Calculate theoretical capacity
@@ -704,7 +950,7 @@ mod test {
 
     #[test]
     fn test_encode_decode_utf8() {
-        let cfg = init_cfg();
+        let cfg = init_cfg_exmaple1();
         let encoder = CFGEncoder::new(cfg);
 
         // Test with data that contains UTF-8 characters when encoded
@@ -720,7 +966,7 @@ mod test {
 
     #[test]
     fn test_invalid_decode() {
-        let cfg = init_cfg();
+        let cfg = init_cfg_exmaple1();
         let encoder = CFGEncoder::new(cfg);
 
         // Test case 1: Invalid UTF-8 sequence
