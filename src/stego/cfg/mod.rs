@@ -1,10 +1,13 @@
 use std::collections::{BTreeMap, HashMap};
 
 use bytes::{BufMut, BytesMut};
+use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
 use crate::utils::find_matching_brace;
 use crate::{stego::Encoder, RainbowError, Result};
+
+use fake::{faker::company::en::*, faker::name::en::*, Fake};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 
@@ -232,6 +235,25 @@ impl CFG {
     }
 }
 
+const VERBS: [&str; 16] = [
+    "reveals",
+    "launches",
+    "discovers",
+    "introduces",
+    "develops",
+    "implements",
+    "demonstrates",
+    "unveils",
+    "presents",
+    "confirms",
+    "establishes",
+    "initiates",
+    "validates",
+    "showcases",
+    "releases",
+    "publishes",
+];
+
 impl CFG {
     /// capacity: 4
     pub fn cfg_example1() -> CFG {
@@ -346,26 +368,6 @@ impl CFG {
             "Aerospace experts",
             "Economic analysts",
             "Urban planners",
-        ];
-
-        // 谓语
-        const VERBS: [&str; 16] = [
-            "reveals",
-            "launches",
-            "discovers",
-            "introduces",
-            "develops",
-            "implements",
-            "demonstrates",
-            "unveils",
-            "presents",
-            "confirms",
-            "establishes",
-            "initiates",
-            "validates",
-            "showcases",
-            "releases",
-            "publishes",
         ];
 
         // 宾语
@@ -498,6 +500,207 @@ impl CFG {
         cfg
     }
 }
+use super::Random;
+
+impl Random for CFG {
+    /// capacity: 32
+    fn random() -> Self {
+        let start = vec![Production {
+            text: "{HEADLINE}\n{DATELINE}\n{CONTENT}\n{QUOTE_INTRO} {QUOTE}".to_string(),
+            product_type: ProductType::Replace,
+        }];
+
+        let headline = vec![Production {
+            text: "{SUBJECT} {VERB} {OBJECT}".to_string(),
+            product_type: ProductType::Replace,
+        }];
+
+        // 生成随机主语 (32)
+        let subjects: Vec<String> = (0..8)
+            .map(|_| {
+                let company = CompanyName().fake::<String>();
+                vec![
+                    company.clone(),
+                    format!("The {} team", company),
+                    format!("{} researchers", company),
+                    format!("{} executives", company),
+                ]
+            })
+            .flatten()
+            .collect();
+
+        assert_eq!(subjects.len(), 32);
+
+        // 生成随机宾语 (32个)
+        let objects: Vec<String> = {
+            let adj = vec![
+                "innovative",
+                "groundbreaking",
+                "revolutionary",
+                "advanced",
+                "cutting-edge",
+                "state-of-the-art",
+                "next-generation",
+                "intelligent",
+            ];
+            let noun = vec![
+                "technology",
+                "solution",
+                "platform",
+                "system",
+                "framework",
+                "architecture",
+                "infrastructure",
+                "ecosystem",
+            ];
+            let mut combinations: Vec<String> = adj
+                .iter()
+                .flat_map(|a| noun.iter().map(move |n| format!("{} {}", a, n)))
+                .collect();
+            assert_eq!(combinations.len(), 64); // 8x8=64 种组合
+            combinations.shuffle(&mut rand::thread_rng());
+            combinations.into_iter().take(32).collect()
+        };
+
+        assert_eq!(objects.len(), 32);
+
+        // 生成随机城市 (32)
+        let cities: Vec<String> = {
+            let mut cities = Vec::new();
+            let mut seen = std::collections::HashSet::new();
+
+            while cities.len() < 32 {
+                let city = fake::faker::address::en::CityName()
+                    .fake::<String>()
+                    .to_uppercase();
+
+                if seen.insert(city.clone()) {
+                    cities.push(city);
+                }
+            }
+
+            cities.shuffle(&mut rand::thread_rng());
+            cities
+        };
+
+        assert_eq!(cities.len(), 32);
+
+        // 生成随机内容段落 (8个)
+        let content: Vec<String> = {
+            let templates = vec![
+                "The development marks {} in the industry. ",
+                "This breakthrough could {} across sectors. ",
+                "The innovation represents {} for future growth. ",
+                "The technology demonstrates {} in real-world applications. ",
+            ];
+            let impacts = vec![
+                "a significant milestone",
+                "revolutionary potential",
+                "unprecedented opportunities",
+                "remarkable capabilities",
+            ];
+            let mut combinations: Vec<String> = templates
+                .iter()
+                .flat_map(|t| {
+                    impacts
+                        .iter()
+                        .map(move |i| format!("{}", t.replace("{}", i)))
+                })
+                .collect();
+            combinations.shuffle(&mut rand::thread_rng());
+            combinations.into_iter().take(8).collect()
+        };
+
+        assert_eq!(content.len(), 8);
+
+        // 生成随机引述 (8个)
+        let quotes: Vec<String> = {
+            let names: Vec<String> = (0..16).map(|_| Name().fake::<String>()).collect();
+            let titles: Vec<String> = (0..16)
+                .map(|_| fake::faker::job::en::Title().fake::<String>())
+                .collect();
+            let templates = vec![
+                "\"We are excited about the potential impact of this development,\" said {}, {}.",
+                "\"This represents a major step forward for our industry,\" commented {}, {}.",
+                "\"The implications of this breakthrough are far-reaching,\" stated {}, {}.",
+                "\"This is just the beginning of our journey,\" noted {}, {}.",
+                "\"Our findings exceed our most optimistic expectations,\" remarked {}, {}.",
+                "\"This development opens up new possibilities,\" explained {}, {}.",
+                "\"We're seeing unprecedented results in our tests,\" reported {}, {}.",
+                "\"This innovation will transform the industry,\" declared {}, {}.",
+            ];
+            let mut combinations: Vec<String> = templates
+                .iter()
+                .enumerate()
+                .map(|(i, t)| {
+                    format!(
+                        "{}",
+                        t.replace("{}", &names[i * 2]).replace("{}", &titles[i * 2])
+                    )
+                })
+                .collect();
+            combinations.shuffle(&mut rand::thread_rng());
+            combinations
+        };
+
+        assert_eq!(quotes.len(), 8);
+
+        // 生成随机引述介绍 (4个)
+        let quote_intros: Vec<String> = {
+            let positions: Vec<String> = (0..8)
+                .map(|_| fake::faker::job::en::Title().fake::<String>())
+                .collect();
+            let verbs = vec![
+                "stated",
+                "commented",
+                "noted",
+                "remarked",
+                "explained",
+                "emphasized",
+                "observed",
+                "added",
+            ];
+            let mut combinations: Vec<String> = positions
+                .iter()
+                .flat_map(|p| verbs.iter().map(move |v| format!("The {} {},", p, v)))
+                .collect();
+            combinations.shuffle(&mut rand::thread_rng());
+            combinations.into_iter().take(4).collect()
+        };
+
+        assert_eq!(quote_intros.len(), 4);
+
+        let dates2 = (1..=32)
+            .map(|d| format!("January {}, 2024", d))
+            .collect::<Vec<_>>();
+        let dates = dates2.iter().map(AsRef::as_ref).collect::<Vec<_>>();
+
+        assert_eq!(dates.len(), 32);
+
+        let variables = b_tree_map! {
+            "start".to_owned() => start,
+            "HEADLINE".to_owned() => headline,
+            "SUBJECT".to_owned() => init_plain_by_list(&subjects.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
+            "VERB".to_owned() => init_plain_by_list(&VERBS),
+            "OBJECT".to_owned() => init_plain_by_list(&objects.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
+            "CITY".to_owned() => init_plain_by_list(&cities.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
+            "DATE".to_owned() => init_plain_by_list(&dates),
+            "QUOTE".to_owned() => init_plain_by_list(&quotes.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
+            "QUOTE_INTRO".to_owned() => init_plain_by_list(&quote_intros.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
+            "CONTENT".to_owned() => init_plain_by_list(&content.iter().map(|s| s.as_str()).collect::<Vec<_>>()),
+            "DATELINE".to_owned() => init_plain_by_list(&vec!["{DATE} {CITY}"]),
+        };
+
+        let cfg = CFG { variables };
+        assert_eq!(
+            cfg.bits_capacity(),
+            32,
+            "Random CFG capacity must = 32 bits"
+        );
+        cfg
+    }
+}
+
 /// CFGEncoder 包装了 [`CFG`], 使其可以针对任意长度的数据进行编码
 #[derive(Debug, Clone)]
 pub struct CFGEncoder {
@@ -509,6 +712,12 @@ impl Default for CFGEncoder {
         Self {
             cfg: CFG::cfg_example2(),
         }
+    }
+}
+
+impl Random for CFGEncoder {
+    fn random() -> Self {
+        Self { cfg: CFG::random() }
     }
 }
 
@@ -694,7 +903,7 @@ use common_macros::b_tree_map;
 #[cfg(test)]
 mod test {
     use super::CFGEncoder;
-    use crate::stego::{cfg::CFG, Encoder};
+    use crate::stego::{cfg::CFG, Encoder, Random};
     use common_macros::hash_map;
     use rand::Rng;
 
@@ -857,6 +1066,12 @@ mod test {
     }
 
     #[test]
+    fn test_random_cfg() {
+        let cfg = CFG::random();
+        test_encode_decode_for_cfg(cfg);
+    }
+
+    #[test]
     fn test_encode_decode_large1() {
         let cfg = CFG::cfg_example1();
         test_encode_decode_large_for_cfg(cfg);
@@ -879,63 +1094,71 @@ mod test {
 
         println!("test0 ok");
 
-        if true {
-            // Test case 1: Basic encoding and decoding
-            let data = vec![0b10101010];
-            let encoded = encoder.encode(&data).unwrap();
+        // Test case 1: Basic encoding and decoding
+        let data = vec![0b10101010];
+        let encoded = encoder.encode(&data).unwrap();
 
-            println!("encoded\n{}", String::from_utf8_lossy(&encoded));
-            let decoded = encoder.decode(&encoded).unwrap();
+        println!("encoded\n{}", String::from_utf8_lossy(&encoded));
+        let decoded = encoder.decode(&encoded).unwrap();
 
-            println!("decoded {:?}", decoded);
-            assert_eq!(data, decoded);
+        println!("decoded {:?}", decoded);
+        assert_eq!(data, decoded);
 
-            println!("test1 ok");
-        }
+        println!("test1 ok");
 
-        if true {
-            // Test case 3: Multiple bytes
-            let multi_bytes = vec![0xFF, 0x00];
-            let encoded = encoder.encode(&multi_bytes).unwrap();
-            let decoded = encoder.decode(&encoded).unwrap();
-            assert_eq!(multi_bytes, decoded);
+        // Test case 3: Multiple bytes
+        let multi_bytes = vec![0xFF, 0x00];
+        let encoded = encoder.encode(&multi_bytes).unwrap();
+        let decoded = encoder.decode(&encoded).unwrap();
+        assert_eq!(multi_bytes, decoded);
 
-            println!("encoded {:#?}", String::from_utf8_lossy(&encoded));
-            println!("decoded {:?}", decoded);
+        println!("encoded {}", String::from_utf8_lossy(&encoded));
+        println!("decoded {:?}", decoded);
 
-            println!("test3 ok");
-        }
+        println!("test3 ok");
 
-        if true {
-            // Test case 3.2: Multiple bytes
-            let multi_bytes = vec![0xFF, 0x00, 0xAA];
-            let encoded = encoder.encode(&multi_bytes).unwrap();
-            let decoded = encoder.decode(&encoded).unwrap();
-            assert_eq!(multi_bytes, decoded);
+        // Test case 3.2: Multiple bytes
+        let multi_bytes = vec![0xFF, 0x00, 0xAA];
+        let encoded = encoder.encode(&multi_bytes).unwrap();
+        let decoded = encoder.decode(&encoded).unwrap();
+        assert_eq!(multi_bytes, decoded);
 
-            println!("test3.2 ok");
-        }
+        println!("test3.2 ok");
 
-        if true {
-            // Test case 4: Large data
-            let large_data: Vec<u8> = (0..32).collect();
-            let encoded = encoder.encode(&large_data).unwrap();
-            let decoded = encoder.decode(&encoded).unwrap();
-            assert_eq!(large_data, decoded);
+        // Test case 4: Large data
+        let large_data: Vec<u8> = (0..32).collect();
+        let encoded = encoder.encode(&large_data).unwrap();
+        let decoded = encoder.decode(&encoded).unwrap();
+        assert_eq!(large_data, decoded);
 
-            println!("test4 ok");
-        }
+        println!("test4 ok");
 
-        if true {
-            // Test case 5: Random data
-            let mut rng = rand::thread_rng();
-            let random_data: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
-            let encoded = encoder.encode(&random_data).unwrap();
-            let decoded = encoder.decode(&encoded).unwrap();
-            assert_eq!(random_data, decoded);
+        // Test case 5: Random data
+        let mut rng = rand::thread_rng();
+        let random_data: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
+        let encoded = encoder.encode(&random_data).unwrap();
+        let decoded = encoder.decode(&encoded).unwrap();
+        assert_eq!(random_data, decoded);
 
-            println!("test5 ok");
-        }
+        println!("test5 ok");
+
+        let test_data = b"Hello, MIME Type Steganography!!!"; //33 bytes
+        let encoded = encoder.encode(&test_data[..]).unwrap();
+        let decoded = encoder.decode(&encoded).unwrap();
+        assert_eq!(test_data[..], decoded);
+        println!("test6 ok");
+
+        let test_data = b"Hello, MIME Type Steganography!!"; //32 bytes
+        let encoded = encoder.encode(&test_data[..]).unwrap();
+        let decoded = encoder.decode(&encoded).unwrap();
+        assert_eq!(test_data[..], decoded);
+        println!("test7 ok");
+
+        let test_data = b"Hello, MIME Type Steganography"; //30 bytes
+        let encoded = encoder.encode(&test_data[..]).unwrap();
+        let decoded = encoder.decode(&encoded).unwrap();
+        assert_eq!(test_data[..], decoded);
+        println!("test8 ok");
     }
 
     fn test_encode_decode_large_for_cfg(cfg: CFG) {

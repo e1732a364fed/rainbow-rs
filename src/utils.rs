@@ -28,16 +28,16 @@ pub fn data_find(data: &[u8], target: &[u8]) -> Option<usize> {
         .position(|window| window == target)
 }
 
-///  找到匹配的右括号位置
-pub fn find_matching_brace(text: &str, start: usize) -> Option<usize> {
+/// find the index of the matching right brace `}`
+pub fn find_matching_brace(text: &str, left_bracket_index: usize) -> Option<usize> {
     let mut stack = 0;
-    for (i, c) in text[start..].char_indices() {
+    for (i, c) in text[left_bracket_index..].char_indices() {
         match c {
             '{' => stack += 1,
             '}' => {
                 stack -= 1;
                 if stack == 0 {
-                    return Some(start + i);
+                    return Some(left_bracket_index + i);
                 }
             }
             _ => {}

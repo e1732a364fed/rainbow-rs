@@ -63,6 +63,7 @@ impl Default for EncoderRegistry {
     fn default() -> Self {
         let mut encoders: HashMap<String, Box<dyn Encoder>> = HashMap::new();
         encoders.insert("html".to_string(), Box::new(html::HtmlEncoder::default()));
+        encoders.insert("cfg".to_string(), Box::new(cfg::CFGEncoder::default()));
         encoders.insert("json".to_string(), Box::new(json::JsonEncoder::default()));
         encoders.insert(
             "prism".to_string(),
@@ -95,6 +96,7 @@ impl EncoderRegistry {
     pub fn new_randomized() -> Self {
         let mut encoders: HashMap<String, Box<dyn Encoder>> = HashMap::new();
         encoders.insert("html".to_string(), Box::new(html::HtmlEncoder::random()));
+        encoders.insert("cfg".to_string(), Box::new(cfg::CFGEncoder::random()));
         encoders.insert("json".to_string(), Box::new(json::JsonEncoder::random()));
         encoders.insert("prism".to_string(), Box::new(prism::PrismEncoder::random()));
         encoders.insert("font".to_string(), Box::new(font::FontEncoder::random()));
