@@ -11,7 +11,7 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::Utc;
 use rand::Rng;
-use reqwest::header::{HeaderMap, HeaderValue, COOKIE};
+use reqwest::header::{HeaderMap, HeaderValue, COOKIE, SET_COOKIE};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -84,6 +84,16 @@ impl Rainbow {
     fn parse_cookies(headers: &HeaderMap) -> Vec<String> {
         headers
             .get_all(COOKIE)
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .flat_map(|s| s.split(';'))
+            .map(|s| s.trim().to_string())
+            .collect()
+    }
+
+    fn parse_set_cookies(headers: &HeaderMap) -> Vec<String> {
+        headers
+            .get_all(SET_COOKIE)
             .iter()
             .filter_map(|v| v.to_str().ok())
             .flat_map(|s| s.split(';'))
@@ -636,16 +646,29 @@ impl NetworkSteganographyProcessor for Rainbow {
         let header_part = String::from_utf8_lossy(&data[..split_pos]);
 
         for line in header_part.lines() {
-            if line.to_lowercase().starts_with("cookie:") {
-                if let Ok(value) = HeaderValue::from_str(line[7..].trim()) {
-                    headers.append(COOKIE, value);
+            if is_client {
+                if line.to_lowercase().starts_with("cookie:") {
+                    if let Ok(value) = HeaderValue::from_str(line[7..].trim()) {
+                        headers.append(COOKIE, value);
+                    }
+                }
+            } else {
+                if line.to_lowercase().starts_with("set-cookie:") {
+                    if let Ok(value) = HeaderValue::from_str(line[12..].trim()) {
+                        headers.append(SET_COOKIE, value);
+                    }
                 }
             }
         }
 
         // 使用 parse_cookies 解析所有 cookie
-        for cookie in Rainbow::parse_cookies(&headers) {
+        for cookie in if is_client {
+            Rainbow::parse_cookies(&headers)
+        } else {
+            Rainbow::parse_set_cookies(&headers)
+        } {
             if let Some((name, value)) = cookie.split_once('=') {
+                // debug!("name: {:?}, value: {:?}", name, value);
                 if HTTP_CONSTANTS.cookie_names.contains(&name.trim()) {
                     if let Ok(info) = PacketInfo::from_cookie(value.trim()) {
                         total_packets = Some(info.total);
@@ -659,7 +682,10 @@ impl NetworkSteganographyProcessor for Rainbow {
         }
 
         let total = total_packets.ok_or_else(|| {
-            RainbowError::InvalidData("Could not find valid packet info in cookies".to_string())
+            // debug!("headers: {:?}", headers);
+            RainbowError::InvalidData(
+                "decrypt_single_read: Could not find valid packet info in cookies".to_string(),
+            )
         })?;
 
         let is_read_end = packet_index + 1 >= total;

@@ -253,8 +253,8 @@ const VERBS: [&str; 16] = [
 ];
 
 impl CFG {
-    /// capacity: 4 bits
-    pub fn example1() -> CFG {
+    /// generate a CFG that looks like a news headline and has 4 bits capacity
+    pub fn news_example1() -> CFG {
         let vp = vec![
             "went ﬁshing {where}".to_string(),
             "went bowling {where}".to_string(),
@@ -289,8 +289,8 @@ impl CFG {
         cfg
     }
 
-    /// capacity: 32 bits
-    pub fn example2() -> CFG {
+    /// generate a CFG that looks like a news headline and has 32 bits capacity
+    pub fn news_example2() -> CFG {
         let start =
             vec!["{SUBJECT_VERB_OBJECT}\n{DATELINE}\n{CONTENT}\n{QUOTE_INTRO} {QUOTE}".to_string()];
 
@@ -467,7 +467,7 @@ impl CFG {
 use super::Random;
 
 impl Random for CFG {
-    /// capacity: 32 bits
+    /// Generate a random CFG that looks like a news headline and has 32 bits capacity
     fn random() -> Self {
         let start = vec!["{HEADLINE}\n{DATELINE}\n{CONTENT}\n{QUOTE_INTRO} {QUOTE}".to_string()];
 
@@ -664,12 +664,13 @@ pub struct CFGEncoder {
 impl Default for CFGEncoder {
     fn default() -> Self {
         Self {
-            cfg: CFG::example2(),
+            cfg: CFG::news_example2(),
         }
     }
 }
 
 impl Random for CFGEncoder {
+    /// cfg: CFG::random()
     fn random() -> Self {
         Self { cfg: CFG::random() }
     }
@@ -870,7 +871,7 @@ mod test {
 
     #[test]
     fn test() {
-        let cfg = CFG::example1();
+        let cfg = CFG::news_example1();
 
         // Test case 1: No choices (default behavior)
         let result = cfg.expand(START_TAG, None);
@@ -908,7 +909,7 @@ mod test {
 
     #[test]
     fn test_reverse() {
-        let cfg = CFG::example1();
+        let cfg = CFG::news_example1();
 
         println!("all choices {:#?}", cfg.generate_all_choices());
 
@@ -947,7 +948,7 @@ mod test {
 
     #[test]
     fn test_reverse_optimized() {
-        let cfg = CFG::example1();
+        let cfg = CFG::news_example1();
 
         // 测试用例1：基本匹配
         let text1 = "Fred went ﬁshing in northern Iowa.";
@@ -1014,13 +1015,13 @@ mod test {
 
     #[test]
     fn test_encode_decode1() {
-        let cfg = CFG::example1();
+        let cfg = CFG::news_example1();
         test_encode_decode_for_cfg(cfg);
     }
 
     #[test]
     fn test2() {
-        let cfg = CFG::example2();
+        let cfg = CFG::news_example2();
         test_encode_decode_for_cfg(cfg);
     }
 
@@ -1032,13 +1033,13 @@ mod test {
 
     #[test]
     fn test_encode_decode_large1() {
-        let cfg = CFG::example1();
+        let cfg = CFG::news_example1();
         test_encode_decode_large_for_cfg(cfg);
     }
 
     #[test]
     fn test_encode_decode_large2() {
-        let cfg = CFG::example2();
+        let cfg = CFG::news_example2();
         test_encode_decode_large_for_cfg(cfg);
     }
 
@@ -1138,7 +1139,7 @@ mod test {
 
     #[test]
     fn test_encoder_capacity() {
-        let cfg = CFG::example1();
+        let cfg = CFG::news_example1();
         let encoder = CFGEncoder { cfg };
 
         // Calculate theoretical capacity
@@ -1164,7 +1165,7 @@ mod test {
 
     #[test]
     fn test_encode_decode_utf8() {
-        let cfg = CFG::example1();
+        let cfg = CFG::news_example1();
         let encoder = CFGEncoder { cfg };
 
         // Test with data that contains UTF-8 characters when encoded
@@ -1180,7 +1181,7 @@ mod test {
 
     #[test]
     fn test_invalid_decode() {
-        let cfg = CFG::example1();
+        let cfg = CFG::news_example1();
         let encoder = CFGEncoder { cfg };
 
         // Test case 1: Invalid UTF-8 sequence

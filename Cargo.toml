@@ -7,7 +7,6 @@ description = "A steganography tool that hides data in HTTP traffic"
 
 [dependencies]
 reqwest = { version = "0.11.23", features = ["json"] }
-anyhow = "1.0.77"
 thiserror = "1.0.53"
 serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0.108"

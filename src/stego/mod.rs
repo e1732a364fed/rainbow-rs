@@ -44,16 +44,26 @@ pub trait Random {
     fn random() -> Self;
 }
 
+/// A trait for types that can encode and decode data
 pub trait Encoder: std::fmt::Debug + dyn_clone::DynClone + Send + Sync {
+    /// The name of the encoder
     fn name(&self) -> &'static str;
+
+    /// Encode data into a series of network packets
     fn encode(&self, data: &[u8]) -> Result<Vec<u8>>;
+
+    /// Decode data from a series of network packets
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>>;
 
+    /// The MIME type of the encoder (e.g. "text/html", "application/json", etc.)
+    ///
+    /// This means the encoder can encode data and present it in this MIME type
     fn get_mime_type(&self) -> &'static str;
 }
 
 dyn_clone::clone_trait_object!(Encoder);
 
+/// A registry of all encoders
 #[derive(Debug, Clone)]
 pub struct EncoderRegistry {
     pub encoders: HashMap<String, Box<dyn Encoder>>,
@@ -93,6 +103,7 @@ impl Default for EncoderRegistry {
 }
 
 impl EncoderRegistry {
+    /// Create a new registry of encoders with all encoders initialized to random values
     pub fn new_randomized() -> Self {
         let mut encoders: HashMap<String, Box<dyn Encoder>> = HashMap::new();
         encoders.insert("html".to_string(), Box::new(html::HtmlEncoder::random()));
@@ -126,6 +137,15 @@ impl EncoderRegistry {
         self.encoders.insert(encoder.name().to_string(), encoder);
     }
 
+    pub fn remove(&mut self, encoder: &str) {
+        self.encoders.remove(encoder);
+    }
+
+    pub fn count(&self) -> usize {
+        self.encoders.len()
+    }
+
+    /// Get all MIME types supported by the encoders
     pub fn get_all_mime_types(&self) -> Vec<&str> {
         self.encoders
             .values()
@@ -135,7 +155,7 @@ impl EncoderRegistry {
             .collect()
     }
 
-    /// Get random MIME type
+    /// Get a random MIME type supported by the encoders
     pub fn get_random_mime_type(&self) -> String {
         let mime_types: Vec<&str> = self
             .encoders
@@ -148,6 +168,7 @@ impl EncoderRegistry {
             .to_string()
     }
 
+    /// Encode data using a specific encoder
     pub fn encode_with(&self, data: &[u8], encoder: &str) -> Result<Vec<u8>> {
         self.encoders
             .get(encoder)
@@ -158,6 +179,7 @@ impl EncoderRegistry {
             .encode(data)
     }
 
+    /// Decode data using a specific encoder
     pub fn decode_with(&self, data: &[u8], decoder: &str) -> Result<Vec<u8>> {
         self.encoders
             .get(decoder)
@@ -262,6 +284,8 @@ mod tests {
         init();
 
         let encoders = EncoderRegistry::default();
+
+        debug!("Encoder count: {}", encoders.count());
 
         // Test all MIME types
         for mime_type in encoders.get_all_mime_types() {

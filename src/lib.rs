@@ -6,7 +6,7 @@
  * different types of carrier files.
  *
  * Main components:
- * - rainbow: Implementation of [`NetworkSteganographyProcessor`]
+ * - rainbow: Implementation of [`NetworkSteganographyProcessor`] that utilizes the stego module
  * - stego: Core steganography algorithms and traits
  * - utils: Common utility functions and helpers
  */
@@ -18,6 +18,7 @@ pub mod rainbow;
 pub mod stego;
 pub mod utils;
 
+/// Error type for the library
 #[derive(Error, Debug)]
 pub enum RainbowError {
     #[error("Invalid data: {0}")]
