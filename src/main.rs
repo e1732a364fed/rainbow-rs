@@ -1,9 +1,9 @@
+use std::fs;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use rainbow::rainbow::Rainbow;
 use rainbow::{DecodeResult, EncodeResult, NetworkSteganographyProcessor};
-use tokio::fs;
 use tracing::info;
 
 #[derive(Parser)]
@@ -54,8 +54,7 @@ enum Commands {
     },
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     tracing_subscriber::fmt::init();
 
@@ -70,21 +69,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             mime_type,
         } => {
             // Read input file
-            let data = fs::read(&input).await?;
+            let data = fs::read(&input)?;
 
             // Encode data
             let EncodeResult {
                 encoded_packets: packets,
                 expected_return_packet_lengths: lengths,
-            } = rainbow.encode_write(&data, client, mime_type).await?;
+            } = rainbow.encode_write(&data, client, mime_type)?;
 
             // Create output directory
-            fs::create_dir_all(&output).await?;
+            fs::create_dir_all(&output)?;
 
             // Write each packet to a separate file
             for (i, (packet, length)) in packets.iter().zip(lengths.iter()).enumerate() {
                 let file_path = output.join(format!("packet_{}.http", i));
-                fs::write(&file_path, packet).await?;
+                fs::write(&file_path, packet)?;
                 info!(
                     "Writing packet {} to {:?}, length: {}",
                     i, file_path, length
@@ -99,17 +98,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             client,
         } => {
             // Read input file
-            let data = fs::read(&input).await?;
+            let data = fs::read(&input)?;
 
             // Decode data
             let DecodeResult {
                 data: decoded,
                 expected_return_length: expected_length,
                 is_read_end: is_end,
-            } = rainbow.decrypt_single_read(data, index, client).await?;
+            } = rainbow.decrypt_single_read(data, index, client)?;
 
             // Write decoded data
-            fs::write(&output, decoded).await?;
+            fs::write(&output, decoded)?;
             info!(
                 "Decoded packet {} to {:?}, expected length: {}, is last packet: {}",
                 index, output, expected_length, is_end

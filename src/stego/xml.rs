@@ -54,7 +54,7 @@ pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
         encoded_data
     );
 
-    debug!("Generated XML content:\n{}", result);
+    // debug!("Generated XML content:\n{}", result);
     Ok(result.into_bytes())
 }
 

@@ -19,7 +19,6 @@ Best used for:
 
 use crate::stego::Encoder;
 use crate::Result;
-use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
 use std::f64::consts::PI;
 use tracing::{debug, warn};
@@ -146,13 +145,12 @@ impl AudioEncoder {
     }
 }
 
-#[async_trait]
 impl Encoder for AudioEncoder {
     fn name(&self) -> &'static str {
         "audio"
     }
 
-    async fn encode(&self, data: &[u8]) -> Result<String> {
+    fn encode(&self, data: &[u8]) -> Result<String> {
         debug!("Encoding data using Web Audio API stego");
 
         if data.is_empty() {
@@ -189,7 +187,7 @@ impl Encoder for AudioEncoder {
         ))
     }
 
-    async fn decode(&self, content: &str) -> Result<Vec<u8>> {
+    fn decode(&self, content: &str) -> Result<Vec<u8>> {
         debug!("Decoding data from Web Audio API stego");
 
         if content.is_empty() {
@@ -248,12 +246,9 @@ impl Encoder for AudioEncoder {
             return Ok(Vec::new());
         }
 
-        // Extract data from audio waveform
+        // Extract hidden data
         match self.extract_data(&samples) {
-            Some(data) => {
-                debug!("Successfully decoded {} bytes from audio", data.len());
-                Ok(data)
-            }
+            Some(data) => Ok(data),
             None => {
                 warn!("Failed to extract data from audio samples");
                 Ok(Vec::new())
@@ -266,58 +261,65 @@ impl Encoder for AudioEncoder {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_audio() {
+    #[test]
+    fn test_audio() {
         let encoder = AudioEncoder::default();
         let test_data = b"Hello, Audio Steganography!";
 
-        // Encode
-        let encoded = encoder.encode(test_data).await.unwrap();
+        // Test encoding
+        let encoded = encoder.encode(test_data).unwrap();
         assert!(!encoded.is_empty());
+        assert!(encoded.contains("audio"));
+        assert!(encoded.contains("base64"));
 
-        // Decode
-        let decoded = encoder.decode(&encoded).await.unwrap();
+        // Test decoding
+        let decoded = encoder.decode(&encoded).unwrap();
         assert_eq!(decoded, test_data);
     }
 
-    #[tokio::test]
-    async fn test_empty_data() {
+    #[test]
+    fn test_empty_data() {
         let encoder = AudioEncoder::default();
         let test_data = b"";
 
-        // Encode
-        let encoded = encoder.encode(test_data).await.unwrap();
+        // Test encoding empty data
+        let encoded = encoder.encode(test_data).unwrap();
         assert!(!encoded.is_empty());
+        assert!(encoded.contains("audio"));
 
-        // Decode
-        let decoded = encoder.decode(&encoded).await.unwrap();
+        // Test decoding empty data
+        let decoded = encoder.decode(&encoded).unwrap();
         assert!(decoded.is_empty());
     }
 
-    #[tokio::test]
-    async fn test_large_data() {
+    #[test]
+    fn test_large_data() {
         let encoder = AudioEncoder::default();
         let test_data: Vec<u8> = (0..2000).map(|i| (i % 256) as u8).collect();
 
-        // Encode
-        let encoded = encoder.encode(&test_data).await.unwrap();
+        // Test encoding large data
+        let encoded = encoder.encode(&test_data).unwrap();
         assert!(!encoded.is_empty());
+        assert!(encoded.contains("audio"));
 
-        // Decode
-        let decoded = encoder.decode(&encoded).await.unwrap();
+        // Test decoding large data
+        let decoded = encoder.decode(&encoded).unwrap();
         assert!(!decoded.is_empty());
+        assert_eq!(&decoded[..1000], &test_data[..1000]);
     }
 
-    #[tokio::test]
-    async fn test_invalid_input() {
+    #[test]
+    fn test_invalid_input() {
         let encoder = AudioEncoder::default();
 
-        // Test empty string
-        let result = encoder.decode("").await.unwrap();
-        assert!(result.is_empty());
+        // Test decoding invalid input
+        let decoded = encoder.decode("invalid audio data").unwrap();
+        assert!(decoded.is_empty());
 
-        // Test invalid content
-        let result = encoder.decode("invalid content").await.unwrap();
-        assert!(result.is_empty());
+        let decoded = encoder.decode("").unwrap();
+        assert!(decoded.is_empty());
+
+        let decoded = encoder.decode("<audio></audio>").unwrap();
+        assert!(decoded.is_empty());
     }
 }

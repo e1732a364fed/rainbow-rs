@@ -26,18 +26,16 @@ pub mod rss;
 pub mod svg_path;
 pub mod xml;
 
-use async_trait::async_trait;
 use rand::Rng;
 use tracing::{debug, warn};
 
 use crate::Result;
 use audio::AudioEncoder;
 
-#[async_trait]
 pub trait Encoder {
     fn name(&self) -> &'static str;
-    async fn encode(&self, data: &[u8]) -> Result<String>;
-    async fn decode(&self, content: &str) -> Result<Vec<u8>>;
+    fn encode(&self, data: &[u8]) -> Result<String>;
+    fn decode(&self, content: &str) -> Result<Vec<u8>>;
 }
 
 const MIME_TYPES: &[(&str, &[&str])] = &[
@@ -56,7 +54,7 @@ pub fn get_random_mime_type() -> String {
 }
 
 /// Encode data based on MIME type
-pub async fn encode_mime(data: &[u8], mime_type: &str) -> Result<Vec<u8>> {
+pub fn encode_mime(data: &[u8], mime_type: &str) -> Result<Vec<u8>> {
     debug!("Encoding data with MIME type: {}", mime_type);
 
     match mime_type {
@@ -89,7 +87,7 @@ pub async fn encode_mime(data: &[u8], mime_type: &str) -> Result<Vec<u8>> {
         }
         "audio/wav" => {
             let encoder = AudioEncoder::default();
-            let encoded = encoder.encode(data).await?;
+            let encoded = encoder.encode(data)?;
             Ok(encoded.into_bytes())
         }
         "image/svg+xml" => svg_path::encode(data),
@@ -101,7 +99,7 @@ pub async fn encode_mime(data: &[u8], mime_type: &str) -> Result<Vec<u8>> {
 }
 
 /// Decode data based on MIME type
-pub async fn decode_mime(data: &[u8], mime_type: &str) -> Result<Vec<u8>> {
+pub fn decode_mime(data: &[u8], mime_type: &str) -> Result<Vec<u8>> {
     debug!("Decoding data with MIME type: {}", mime_type);
 
     match mime_type {
@@ -136,7 +134,7 @@ pub async fn decode_mime(data: &[u8], mime_type: &str) -> Result<Vec<u8>> {
         "audio/wav" => {
             let encoder = AudioEncoder::default();
             let content = String::from_utf8(data.to_vec())?;
-            encoder.decode(&content).await
+            encoder.decode(&content)
         }
         "image/svg+xml" => svg_path::decode(data),
         _ => {
@@ -150,58 +148,48 @@ pub async fn decode_mime(data: &[u8], mime_type: &str) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
 
-    // async fn test_encoder<T: Encoder>(encoder: T, test_data: &[u8]) {
-    //     // Encode
-    //     let encoded = encoder.encode(test_data).await.unwrap();
-    //     assert!(!encoded.is_empty());
-
-    //     // Decode
-    //     let decoded = encoder.decode(&encoded).await.unwrap();
-    //     assert_eq!(decoded, test_data);
-    // }
-
-    #[tokio::test]
-    async fn test_mime_type_encoding() {
+    #[test]
+    fn test_mime_type_encoding() {
         let test_data = b"Hello, MIME Type Steganography!";
 
         // Test all MIME types
         for (mime_type, _) in MIME_TYPES {
-            let encoded = encode_mime(test_data, mime_type).await.unwrap();
-            let decoded = decode_mime(&encoded, mime_type).await.unwrap();
+            let encoded = encode_mime(test_data, mime_type).unwrap();
+            let decoded = decode_mime(&encoded, mime_type).unwrap();
             assert_eq!(decoded, test_data);
         }
     }
 
-    #[tokio::test]
-    async fn test_random_mime_type() {
+    #[test]
+    fn test_random_mime_type() {
         let mime_type = get_random_mime_type();
         assert!(MIME_TYPES.iter().any(|(mt, _)| *mt == mime_type));
     }
 
-    #[tokio::test]
-    async fn test_unsupported_mime_type() {
+    #[test]
+    fn test_unsupported_mime_type() {
         let test_data = b"Hello, Unsupported MIME Type!";
-        let encoded = encode_mime(test_data, "unsupported/type").await.unwrap();
-        let decoded = decode_mime(&encoded, "unsupported/type").await.unwrap();
+        let encoded = encode_mime(test_data, "unsupported/type").unwrap();
+        let decoded = decode_mime(&encoded, "unsupported/type").unwrap();
         assert_eq!(decoded, test_data);
     }
 
-    #[tokio::test]
-    async fn test_empty_data_mime() {
+    #[test]
+    fn test_empty_data_mime() {
         let test_data = b"";
         for (mime_type, _) in MIME_TYPES {
-            let encoded = encode_mime(test_data, mime_type).await.unwrap();
-            let decoded = decode_mime(&encoded, mime_type).await.unwrap();
+            let encoded = encode_mime(test_data, mime_type).unwrap();
+            let decoded = decode_mime(&encoded, mime_type).unwrap();
             assert!(decoded.is_empty());
         }
     }
 
-    #[tokio::test]
-    async fn test_large_data_mime() {
+    #[test]
+    fn test_large_data_mime() {
         let test_data: Vec<u8> = (0..2000).map(|i| (i % 256) as u8).collect();
         for (mime_type, _) in MIME_TYPES {
-            let encoded = encode_mime(&test_data, mime_type).await.unwrap();
-            let decoded = decode_mime(&encoded, mime_type).await.unwrap();
+            let encoded = encode_mime(&test_data, mime_type).unwrap();
+            let decoded = decode_mime(&encoded, mime_type).unwrap();
             assert!(!decoded.is_empty());
         }
     }

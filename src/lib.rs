@@ -11,7 +11,6 @@
  * - utils: Common utility functions and helpers
  */
 
-use async_trait::async_trait;
 use dyn_clone::DynClone;
 use thiserror::Error;
 
@@ -62,18 +61,19 @@ pub struct EncodeResult {
     pub expected_return_packet_lengths: Vec<usize>,
 }
 
-#[async_trait]
 pub trait NetworkSteganographyProcessor: Send + Sync + DynClone {
-    async fn encode_write(
+    /// Encode data into a series of network packets
+    fn encode_write(
         &self,
-        plain_data: &[u8],
+        data: &[u8],
         is_client: bool,
         mime_type: Option<String>,
     ) -> Result<EncodeResult>;
 
-    async fn decrypt_single_read(
+    /// Decrypt a single packet of data
+    fn decrypt_single_read(
         &self,
-        cipher_data: Vec<u8>,
+        data: Vec<u8>,
         packet_index: usize,
         is_client: bool,
     ) -> Result<DecodeResult>;

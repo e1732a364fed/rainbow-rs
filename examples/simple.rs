@@ -1,8 +1,8 @@
 use rainbow::rainbow::Rainbow;
 use rainbow::{DecodeResult, EncodeResult, NetworkSteganographyProcessor};
-use tokio::fs;
+use std::fs;
 
-async fn test_stego(
+fn test_stego(
     rainbow: &Rainbow,
     data: &[u8],
     mime_type: &str,
@@ -14,9 +14,7 @@ async fn test_stego(
     let EncodeResult {
         encoded_packets: packets,
         expected_return_packet_lengths: lengths,
-    } = rainbow
-        .encode_write(data, true, Some(mime_type.to_string()))
-        .await?;
+    } = rainbow.encode_write(data, true, Some(mime_type.to_string()))?;
 
     println!("\nGenerated {} packets", packets.len());
 
@@ -26,8 +24,7 @@ async fn test_stego(
     fs::create_dir_all(format!(
         "examples/data/output/{}",
         mime_type.split('/').last().unwrap()
-    ))
-    .await?;
+    ))?;
 
     // 保存并解码每个数据包
     for (i, (packet, length)) in packets.iter().zip(lengths.iter()).enumerate() {
@@ -36,7 +33,7 @@ async fn test_stego(
             mime_type.split('/').last().unwrap(),
             i
         );
-        fs::write(&file_path, packet).await?;
+        fs::write(&file_path, packet)?;
         println!("Writing packet {} to {}, length: {}", i, file_path, length);
 
         // 解码数据包
@@ -44,7 +41,7 @@ async fn test_stego(
             data: decoded,
             expected_return_length: expected_length,
             is_read_end: is_end,
-        } = rainbow.decrypt_single_read(packet.clone(), i, true).await?;
+        } = rainbow.decrypt_single_read(packet.clone(), i, true)?;
 
         println!(
             "Decoded packet {}: length = {}, expected length = {}, is last packet = {}",
@@ -59,8 +56,7 @@ async fn test_stego(
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
     tracing_subscriber::fmt::init();
 
@@ -68,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rainbow = Rainbow::new();
 
     // 读取测试文件
-    let data = fs::read("examples/data/test.txt").await?;
+    let data = fs::read("examples/data/test.txt")?;
 
     // 测试所有支持的 MIME 类型
     let mime_types = [
@@ -79,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for mime_type in mime_types {
-        test_stego(&rainbow, &data, mime_type).await?;
+        test_stego(&rainbow, &data, mime_type)?;
     }
 
     Ok(())
