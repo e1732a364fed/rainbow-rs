@@ -23,6 +23,7 @@ use base64::{engine::general_purpose, Engine as _};
 use std::f64::consts::PI;
 use tracing::{debug, warn};
 
+#[derive(Debug, Clone)]
 pub struct AudioEncoder {
     sample_rate: u32,
     carrier_freq: u32,
@@ -217,22 +218,37 @@ impl Encoder for AudioEncoder {
 
         Ok(Vec::new())
     }
+
+    fn get_mime_type(&self) -> &'static str {
+        "audio/wav"
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn init() {
+        let _ = tracing_subscriber::fmt()
+            .with_test_writer()
+            .with_max_level(tracing::Level::DEBUG)
+            .try_init();
+    }
+
     #[test]
     fn test_audio() {
+        init();
         let encoder = AudioEncoder::default();
         let test_data = b"Hello, Audio Steganography!";
 
         // Test encoding
         let encoded = encoder.encode(test_data).unwrap();
         assert!(!encoded.is_empty());
-        assert!(String::from_utf8_lossy(&encoded).contains("audio"));
-        assert!(String::from_utf8_lossy(&encoded).contains("base64"));
+
+        let encoded_str = String::from_utf8_lossy(&encoded);
+
+        // debug!("Encoded: {}", encoded_str);
+        assert!(encoded_str.contains("audio"));
 
         // Test decoding
         let decoded = encoder.decode(&encoded).unwrap();

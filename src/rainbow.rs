@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 use crate::{
-    stego::{self, get_random_mime_type},
+    stego::{get_random_mime_type, EncodersHolder},
     utils::{generate_realistic_headers, validate_http_packet, HTTP_CONSTANTS},
     DecodeResult, EncodeResult, NetworkSteganographyProcessor, RainbowError, Result,
 };
@@ -57,11 +57,15 @@ impl PacketInfo {
 
 /// An implementation of [`NetworkSteganographyProcessor`]
 #[derive(Debug, Clone)]
-pub struct Rainbow;
+pub struct Rainbow {
+    encoders: EncodersHolder,
+}
 
 impl Rainbow {
     pub fn new() -> Self {
-        Self
+        Self {
+            encoders: EncodersHolder::new_randomized(),
+        }
     }
 
     fn parse_cookies(headers: &HeaderMap) -> Vec<String> {
@@ -185,7 +189,7 @@ impl Rainbow {
             headers.push_str(&format!("X-Data: {}\r\n", BASE64.encode(data)));
             headers.push_str("\r\n"); // 确保 GET 请求也有空行
         } else {
-            let encoded = stego::encode_mime(data, mime_type)?;
+            let encoded = self.encoders.encode_mime(data, mime_type)?;
             headers.push_str(&format!("Content-Type: {}\r\n", mime_type));
             headers.push_str(&format!("Content-Length: {}\r\n", encoded.len()));
             headers.push_str("\r\n");
@@ -202,7 +206,7 @@ impl Rainbow {
         mime_type: &str,
         _status_code: u16,
     ) -> Result<Vec<u8>> {
-        let encoded = stego::encode_mime(data, mime_type)?;
+        let encoded = self.encoders.encode_mime(data, mime_type)?;
 
         let mut headers = String::new();
         // 确保响应行是第一行
@@ -271,7 +275,7 @@ impl Rainbow {
         );
 
         // 解码数据
-        let decoded = stego::decode_mime(body.as_bytes(), mime_type)?;
+        let decoded = self.encoders.decode_mime(body.as_bytes(), mime_type)?;
         debug!("Successfully decoded content: length={}", decoded.len());
 
         Ok(decoded)
@@ -317,6 +321,161 @@ impl Rainbow {
         Err(RainbowError::InvalidData(
             "Content length mismatch".to_string(),
         ))
+    }
+
+    fn find_optimal_packet_size(
+        &self,
+        base_headers: &str,
+        target_length: usize,
+        mime_type: &str,
+    ) -> Result<(Vec<u8>, usize)> {
+        let base_header_length = base_headers.len();
+        let min_header_length = base_header_length - "0000000000\r\n\r\n".len() + "0\r\n\r\n".len();
+
+        if target_length < min_header_length {
+            return Err(RainbowError::InvalidData(format!(
+                "Target length {} is too small for headers (min {})",
+                target_length, min_header_length
+            )));
+        }
+
+        let mut left = 1;
+        let mut right = target_length - min_header_length;
+        let mut best_result = None;
+
+        while left <= right {
+            let mid = (left + right) / 2;
+            let random_data: Vec<u8> = (0..mid).map(|_| rand::random()).collect();
+
+            let encoded = self.encoders.encode_mime(&random_data, mime_type)?;
+
+            fn calculate_total_length(headers: &str, encoded: &[u8]) -> Result<usize> {
+                let content_length_str = encoded.len().to_string();
+                let header_length = headers.len() - "0000000000\r\n\r\n".len()
+                    + content_length_str.len()
+                    + "\r\n\r\n".len();
+                Ok(header_length + encoded.len())
+            }
+
+            let total_len = calculate_total_length(&base_headers, &encoded)?;
+
+            match total_len.cmp(&target_length) {
+                std::cmp::Ordering::Equal => {
+                    return Ok((encoded, 0));
+                }
+                std::cmp::Ordering::Less => {
+                    best_result = Some((encoded, target_length - total_len));
+                    left = mid + 1;
+                }
+                std::cmp::Ordering::Greater => {
+                    right = mid - 1;
+                }
+            }
+        }
+
+        best_result.ok_or_else(|| {
+            RainbowError::InvalidData(format!(
+                "Could not generate packet of length {}",
+                target_length
+            ))
+        })
+    }
+
+    /// 生成指定长度的 HTTP 请求或响应包
+    ///
+    /// # Arguments
+    /// * `target_length` - 目标数据包长度
+    /// * `is_request` - 是否为请求包（true 为请求，false 为响应）
+    ///
+    /// # Returns
+    /// 返回指定长度的 HTTP 数据包
+    pub fn generate_stego_packet_with_length(
+        &self,
+        target_length: usize,
+        is_request: bool,
+    ) -> Result<Vec<u8>> {
+        // 提取基础头部生成到单独的函数
+        fn generate_base_headers(
+            is_request: bool,
+            is_small_packet: bool,
+        ) -> (String, &'static str) {
+            let mut headers = String::new();
+            let path = if is_request {
+                let method = if is_small_packet { "GET" } else { "GET" };
+                let paths = HTTP_CONSTANTS.get_paths;
+                let path = if is_small_packet {
+                    paths.iter().min_by_key(|p| p.len()).unwrap_or(&"/")
+                } else {
+                    paths[rand::thread_rng().gen_range(0..paths.len())]
+                };
+                headers.push_str(&format!("{} {} HTTP/1.1\r\n", method, path));
+                path
+            } else {
+                let rb = Rainbow::new();
+                headers.push_str(&format!("HTTP/1.1 {} OK\r\n", rb.get_random_status_code()));
+                ""
+            };
+            (headers, path)
+        }
+
+        let packet_info = PacketInfo::new(0, 1, target_length);
+        let is_small_packet = target_length < 1000;
+
+        // 生成基础头部
+        let (mut headers, _path) = generate_base_headers(is_request, is_small_packet);
+
+        // 选择合适的 MIME 类型
+        let mime_type = if is_small_packet {
+            "application/json".to_string()
+        } else {
+            get_random_mime_type()
+        };
+
+        // 添加基础头部
+        if is_small_packet {
+            headers.push_str("Host: localhost\r\n");
+            headers.push_str("Connection: close\r\n");
+        } else {
+            headers.push_str(&format!(
+                "Date: {}\r\n",
+                chrono::Utc::now().format("%a, %d %b %Y %H:%M:%S GMT")
+            ));
+
+            // 添加真实头部
+            let realistic_headers = generate_realistic_headers(is_request);
+            for (name, value) in realistic_headers {
+                if let Some(header_name) = name {
+                    if let Ok(value_str) = value.to_str() {
+                        headers.push_str(&format!("{}: {}\r\n", header_name, value_str));
+                    }
+                }
+            }
+        }
+
+        // 添加 Cookie 头部
+        headers.push_str(&generate_cookie_header(&packet_info, is_request)?);
+        headers.push_str(&format!("Content-Type: {}\r\n", mime_type));
+
+        // 预留 Content-Length 占位符
+        headers.push_str("Content-Length: 0000000000\r\n\r\n");
+
+        let (encoded, padding_len) =
+            self.find_optimal_packet_size(&headers, target_length, &mime_type)?;
+
+        let mut final_packet = build_final_packet(&headers, &encoded)?;
+
+        debug!(
+            "final_packet length: {}, padding_len: {}",
+            final_packet.len(),
+            padding_len
+        );
+
+        // 添加填充（如果需要）
+        if padding_len > 0 {
+            let _ = add_padding_to_packet(&mut final_packet, padding_len);
+        }
+
+        Ok(final_packet)
     }
 }
 
@@ -463,155 +622,6 @@ impl NetworkSteganographyProcessor for Rainbow {
     }
 }
 
-/// 生成指定长度的 HTTP 请求或响应包
-///
-/// # Arguments
-/// * `target_length` - 目标数据包长度
-/// * `is_request` - 是否为请求包（true 为请求，false 为响应）
-///
-/// # Returns
-/// 返回指定长度的 HTTP 数据包
-pub fn generate_stego_packet_with_length(
-    target_length: usize,
-    is_request: bool,
-) -> Result<Vec<u8>> {
-    // 提取基础头部生成到单独的函数
-    fn generate_base_headers(is_request: bool, is_small_packet: bool) -> (String, &'static str) {
-        let mut headers = String::new();
-        let path = if is_request {
-            let method = if is_small_packet { "GET" } else { "GET" };
-            let paths = HTTP_CONSTANTS.get_paths;
-            let path = if is_small_packet {
-                paths.iter().min_by_key(|p| p.len()).unwrap_or(&"/")
-            } else {
-                paths[rand::thread_rng().gen_range(0..paths.len())]
-            };
-            headers.push_str(&format!("{} {} HTTP/1.1\r\n", method, path));
-            path
-        } else {
-            let rb = Rainbow::new();
-            headers.push_str(&format!("HTTP/1.1 {} OK\r\n", rb.get_random_status_code()));
-            ""
-        };
-        (headers, path)
-    }
-
-    let packet_info = PacketInfo::new(0, 1, target_length);
-    let is_small_packet = target_length < 1000;
-
-    // 生成基础头部
-    let (mut headers, _path) = generate_base_headers(is_request, is_small_packet);
-
-    // 选择合适的 MIME 类型
-    let mime_type = if is_small_packet {
-        "application/json".to_string()
-    } else {
-        get_random_mime_type()
-    };
-
-    // 添加基础头部
-    if is_small_packet {
-        headers.push_str("Host: localhost\r\n");
-        headers.push_str("Connection: close\r\n");
-    } else {
-        headers.push_str(&format!(
-            "Date: {}\r\n",
-            chrono::Utc::now().format("%a, %d %b %Y %H:%M:%S GMT")
-        ));
-
-        // 添加真实头部
-        let realistic_headers = generate_realistic_headers(is_request);
-        for (name, value) in realistic_headers {
-            if let Some(header_name) = name {
-                if let Ok(value_str) = value.to_str() {
-                    headers.push_str(&format!("{}: {}\r\n", header_name, value_str));
-                }
-            }
-        }
-    }
-
-    // 添加 Cookie 头部
-    headers.push_str(&generate_cookie_header(&packet_info, is_request)?);
-    headers.push_str(&format!("Content-Type: {}\r\n", mime_type));
-
-    // 预留 Content-Length 占位符
-    headers.push_str("Content-Length: 0000000000\r\n\r\n");
-
-    let (encoded, padding_len) = find_optimal_packet_size(&headers, target_length, &mime_type)?;
-
-    let mut final_packet = build_final_packet(&headers, &encoded)?;
-
-    debug!(
-        "final_packet length: {}, padding_len: {}",
-        final_packet.len(),
-        padding_len
-    );
-
-    // 添加填充（如果需要）
-    if padding_len > 0 {
-        let _ = add_padding_to_packet(&mut final_packet, padding_len);
-    }
-
-    Ok(final_packet)
-}
-
-fn find_optimal_packet_size(
-    base_headers: &str,
-    target_length: usize,
-    mime_type: &str,
-) -> Result<(Vec<u8>, usize)> {
-    let base_header_length = base_headers.len();
-    let min_header_length = base_header_length - "0000000000\r\n\r\n".len() + "0\r\n\r\n".len();
-
-    if target_length < min_header_length {
-        return Err(RainbowError::InvalidData(format!(
-            "Target length {} is too small for headers (min {})",
-            target_length, min_header_length
-        )));
-    }
-
-    let mut left = 1;
-    let mut right = target_length - min_header_length;
-    let mut best_result = None;
-
-    while left <= right {
-        let mid = (left + right) / 2;
-        let random_data: Vec<u8> = (0..mid).map(|_| rand::random()).collect();
-
-        let encoded = stego::encode_mime(&random_data, mime_type)?;
-
-        fn calculate_total_length(headers: &str, encoded: &[u8]) -> Result<usize> {
-            let content_length_str = encoded.len().to_string();
-            let header_length = headers.len() - "0000000000\r\n\r\n".len()
-                + content_length_str.len()
-                + "\r\n\r\n".len();
-            Ok(header_length + encoded.len())
-        }
-
-        let total_len = calculate_total_length(&base_headers, &encoded)?;
-
-        match total_len.cmp(&target_length) {
-            std::cmp::Ordering::Equal => {
-                return Ok((encoded, 0));
-            }
-            std::cmp::Ordering::Less => {
-                best_result = Some((encoded, target_length - total_len));
-                left = mid + 1;
-            }
-            std::cmp::Ordering::Greater => {
-                right = mid - 1;
-            }
-        }
-    }
-
-    best_result.ok_or_else(|| {
-        RainbowError::InvalidData(format!(
-            "Could not generate packet of length {}",
-            target_length
-        ))
-    })
-}
-
 fn build_final_packet(headers: &str, encoded: &[u8]) -> Result<Vec<u8>> {
     let mut packet = headers
         .replace("0000000000\r\n\r\n", &format!("{}\r\n\r\n", encoded.len()))
@@ -703,9 +713,13 @@ mod tests {
     fn test_generate_packet_with_small_length() {
         init();
 
+        let rainbow = Rainbow::new();
+
         // 测试请求生成 - 使用更大的初始大小
         let target_length = 500;
-        let request = generate_stego_packet_with_length(target_length, true).unwrap();
+        let request = rainbow
+            .generate_stego_packet_with_length(target_length, true)
+            .unwrap();
         let diff = target_length.abs_diff(request.len());
         assert!(diff <= 100);
 
@@ -719,9 +733,13 @@ mod tests {
     fn test_generate_packet_with_length() {
         init();
 
+        let rainbow = Rainbow::new();
+
         // 测试请求生成 - 使用更大的初始大小
         let target_length = 2000;
-        let request = generate_stego_packet_with_length(target_length, true).unwrap();
+        let request = rainbow
+            .generate_stego_packet_with_length(target_length, true)
+            .unwrap();
 
         let diff = target_length.abs_diff(request.len());
         assert!(diff <= 100);
@@ -732,7 +750,9 @@ mod tests {
         debug!("2000 ok");
 
         let target_length = 3000;
-        let response = generate_stego_packet_with_length(target_length, false).unwrap();
+        let response = rainbow
+            .generate_stego_packet_with_length(target_length, false)
+            .unwrap();
 
         let diff = target_length.abs_diff(response.len());
         assert!(diff <= 100);

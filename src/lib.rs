@@ -61,7 +61,7 @@ pub struct EncodeResult {
     pub expected_return_packet_lengths: Vec<usize>,
 }
 
-pub trait NetworkSteganographyProcessor: Send + Sync + DynClone {
+pub trait NetworkSteganographyProcessor: DynClone {
     /// Encode data into a series of network packets
     fn encode_write(
         &self,

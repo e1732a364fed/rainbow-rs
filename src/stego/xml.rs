@@ -19,16 +19,33 @@
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::Utc;
+use fake::{faker::*, Fake};
 use rand::{seq::SliceRandom, Rng};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
-use crate::stego::Encoder;
-use crate::Result;
+use crate::stego::{Encoder, Random};
+use crate::{RainbowError, Result};
 
 const VISIBLE_VALUES: &[&str] = &["default", "enabled", "true", "active", "1"];
 
+#[derive(Debug, Clone)]
+
 pub struct XmlEncoder {
     root_tag: String,
+}
+
+impl Random for XmlEncoder {
+    fn random() -> Self {
+        Self {
+            root_tag: format!(
+                "{}-config",
+                company::en::CompanyName()
+                    .fake::<String>()
+                    .to_lowercase()
+                    .replace(" ", "-")
+            ),
+        }
+    }
 }
 
 impl Default for XmlEncoder {
@@ -50,6 +67,10 @@ impl Encoder for XmlEncoder {
 
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
         decode(content)
+    }
+
+    fn get_mime_type(&self) -> &'static str {
+        "application/xml"
     }
 }
 
@@ -92,8 +113,9 @@ pub fn decode(xml_content: &[u8]) -> Result<Vec<u8>> {
     debug!("Decoding XML steganography");
 
     if xml_content.is_empty() {
-        warn!("Empty or nil XML content");
-        return Ok(Vec::new());
+        return Err(RainbowError::InvalidData(
+            "Empty or nil XML content".to_string(),
+        ));
     }
 
     let xml_str = String::from_utf8_lossy(xml_content);
@@ -113,13 +135,21 @@ pub fn decode(xml_content: &[u8]) -> Result<Vec<u8>> {
         }
     }
 
-    warn!("No CDATA section found in XML");
-    Ok(Vec::new())
+    Err(RainbowError::InvalidData(
+        "No CDATA section found in XML".to_string(),
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn init() {
+        let _ = tracing_subscriber::fmt()
+            .with_test_writer()
+            .with_max_level(tracing::Level::DEBUG)
+            .try_init();
+    }
 
     #[test]
     fn test_xml() {
@@ -149,9 +179,10 @@ mod tests {
 
     #[test]
     fn test_invalid_input() {
-        let result = decode(b"").unwrap();
-        assert!(result.is_empty());
-        let result = decode(b"invalid content").unwrap();
-        assert!(result.is_empty());
+        init();
+        let result = decode(b"");
+        assert!(result.is_err());
+        let result = decode(b"invalid content");
+        assert!(result.is_err());
     }
 }

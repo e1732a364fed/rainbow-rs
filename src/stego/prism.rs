@@ -21,10 +21,11 @@
  */
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use fake::{faker::*, Fake};
 use rand::Rng;
 use tracing::{debug, info};
 
-use crate::stego::Encoder;
+use crate::stego::{Encoder, Random};
 use crate::Result;
 
 const MIN_LAYERS: usize = 20;
@@ -138,8 +139,22 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
     }
 }
 
+#[derive(Debug, Clone)]
+
 pub struct PrismEncoder {
     page_title: String,
+}
+
+impl Random for PrismEncoder {
+    fn random() -> Self {
+        Self {
+            page_title: format!(
+                "{} - {}",
+                company::en::CompanyName().fake::<String>(),
+                company::en::Industry().fake::<String>()
+            ),
+        }
+    }
 }
 
 impl Default for PrismEncoder {
@@ -161,6 +176,10 @@ impl Encoder for PrismEncoder {
 
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
         decode(content)
+    }
+
+    fn get_mime_type(&self) -> &'static str {
+        "text/html"
     }
 }
 

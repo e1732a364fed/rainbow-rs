@@ -18,16 +18,37 @@ Key features:
 - Reversible encoding/decoding
 */
 
-use crate::stego::Encoder;
 use crate::Result;
+use fake::{faker::*, Fake};
 use regex::Regex;
 use tracing::{debug, info, warn};
+
+use crate::stego::{Encoder, Random};
+
+#[derive(Debug, Clone)]
 
 pub struct FontEncoder {
     page_title: String,
     font_family: String,
     heading: String,
     content: String,
+}
+
+impl Random for FontEncoder {
+    fn random() -> Self {
+        Self {
+            page_title: format!(
+                "Font Gallery - {}",
+                company::en::CompanyName().fake::<String>()
+            ),
+            font_family: format!("{} Sans", name::en::LastName().fake::<String>()),
+            heading: format!(
+                "Typography by {}",
+                company::en::CompanyName().fake::<String>()
+            ),
+            content: lorem::en::Paragraph(2..4).fake::<String>(),
+        }
+    }
 }
 
 impl Default for FontEncoder {
@@ -58,6 +79,10 @@ impl Encoder for FontEncoder {
 
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
         decode(content)
+    }
+
+    fn get_mime_type(&self) -> &'static str {
+        "text/html"
     }
 }
 

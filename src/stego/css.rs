@@ -16,10 +16,14 @@ Use cases:
 - Steganographic watermarking of web content
 */
 
-use crate::stego::Encoder;
 use crate::Result;
+use fake::{faker::*, Fake};
 use rand::{thread_rng, Rng};
 use regex;
+
+use crate::stego::{Encoder, Random};
+
+#[derive(Debug, Clone)]
 
 pub struct CssEncoder {
     page_title: String,
@@ -28,6 +32,30 @@ pub struct CssEncoder {
     elem_prefix: String,
     delay_one: String,
     delay_zero: String,
+}
+
+impl Random for CssEncoder {
+    fn random() -> Self {
+        let mut rng = thread_rng();
+        Self {
+            page_title: format!(
+                "{} - {}",
+                company::en::CompanyName().fake::<String>(),
+                lorem::en::Sentence(3..6).fake::<String>()
+            ),
+            content_text: lorem::en::Paragraph(1..3).fake::<String>(),
+            anim_prefix: format!(
+                "anim-{}",
+                name::en::FirstName().fake::<String>().to_lowercase()
+            ),
+            elem_prefix: format!(
+                "elem-{}",
+                name::en::LastName().fake::<String>().to_lowercase()
+            ),
+            delay_one: format!("{}s", (rng.gen_range(1..5) as f32 / 10.0)),
+            delay_zero: format!("{}s", (rng.gen_range(5..10) as f32 / 10.0)),
+        }
+    }
 }
 
 impl Default for CssEncoder {
@@ -62,6 +90,10 @@ impl Encoder for CssEncoder {
 
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
         decode(content)
+    }
+
+    fn get_mime_type(&self) -> &'static str {
+        "text/css"
     }
 }
 

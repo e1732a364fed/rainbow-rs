@@ -14,15 +14,32 @@ Key features:
 */
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use fake::{faker::*, Fake};
 use rand::seq::SliceRandom;
 
-use crate::stego::Encoder;
+use crate::stego::{Encoder, Random};
 use crate::Result;
+
+#[derive(Debug, Clone)]
 
 pub struct HtmlEncoder {
     page_title: String,
     heading: String,
     content: String,
+}
+
+impl Random for HtmlEncoder {
+    fn random() -> Self {
+        Self {
+            page_title: format!(
+                "{} - {}",
+                company::en::CompanyName().fake::<String>(),
+                company::en::Industry().fake::<String>()
+            ),
+            heading: format!("Welcome to {}", company::en::CompanyName().fake::<String>()),
+            content: lorem::en::Paragraph(2..4).fake::<String>(),
+        }
+    }
 }
 
 impl Default for HtmlEncoder {
@@ -46,6 +63,10 @@ impl Encoder for HtmlEncoder {
 
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
         decode(content)
+    }
+
+    fn get_mime_type(&self) -> &'static str {
+        "text/html"
     }
 }
 

@@ -23,11 +23,17 @@ use chrono::Utc;
 use serde_json::{json, Value};
 use tracing::{debug, info, warn};
 
-use crate::stego::Encoder;
+use crate::stego::{Encoder, Random};
 use crate::Result;
 
-pub struct JsonEncoder {
-    // version: String,
+#[derive(Debug, Clone)]
+
+pub struct JsonEncoder {}
+
+impl Random for JsonEncoder {
+    fn random() -> Self {
+        Self {}
+    }
 }
 
 impl Default for JsonEncoder {
@@ -49,6 +55,10 @@ impl Encoder for JsonEncoder {
 
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
         decode(content)
+    }
+
+    fn get_mime_type(&self) -> &'static str {
+        "application/json"
     }
 }
 

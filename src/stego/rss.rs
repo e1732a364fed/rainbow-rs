@@ -15,9 +15,12 @@
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::prelude::*;
+use fake::{faker::*, Fake};
 
-use crate::stego::Encoder;
+use crate::stego::{Encoder, Random};
 use crate::{RainbowError, Result};
+
+#[derive(Debug, Clone)]
 
 pub struct RssEncoder {
     feed_title: String,
@@ -25,6 +28,28 @@ pub struct RssEncoder {
     feed_description: String,
     item_title: String,
     item_description: String,
+}
+
+impl Random for RssEncoder {
+    fn random() -> Self {
+        let company = company::en::CompanyName().fake::<String>();
+        let domain = internet::en::DomainSuffix().fake::<String>();
+        Self {
+            feed_title: format!("{} News Feed", company),
+            feed_link: format!(
+                "https://news.{}.{}",
+                company.to_lowercase().replace(" ", "-"),
+                domain
+            ),
+            feed_description: format!("Latest updates from {}", company),
+            item_title: format!(
+                "{} {}",
+                company::en::Industry().fake::<String>(),
+                lorem::en::Word().fake::<String>()
+            ),
+            item_description: lorem::en::Paragraph(1..3).fake::<String>(),
+        }
+    }
 }
 
 impl Default for RssEncoder {
@@ -57,6 +82,10 @@ impl Encoder for RssEncoder {
 
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
         decode(content)
+    }
+
+    fn get_mime_type(&self) -> &'static str {
+        "application/xml"
     }
 }
 

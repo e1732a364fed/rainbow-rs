@@ -14,13 +14,29 @@ Key features:
 Suitable for hiding data in CSS stylesheets where Grid/Flex layouts are expected.
 */
 
-use crate::stego::Encoder;
 use crate::Result;
+use fake::{faker::*, Fake};
 use regex::Regex;
 use tracing::{debug, info};
 
+use crate::stego::{Encoder, Random};
+
+#[derive(Debug, Clone)]
+
 pub struct GridEncoder {
     container_class: String,
+}
+
+impl Random for GridEncoder {
+    fn random() -> Self {
+        Self {
+            container_class: format!(
+                "grid-{}-{}",
+                name::en::FirstName().fake::<String>().to_lowercase(),
+                name::en::LastName().fake::<String>().to_lowercase()
+            ),
+        }
+    }
 }
 
 impl Default for GridEncoder {
@@ -42,6 +58,10 @@ impl Encoder for GridEncoder {
 
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
         decode(content)
+    }
+
+    fn get_mime_type(&self) -> &'static str {
+        "text/css"
     }
 }
 

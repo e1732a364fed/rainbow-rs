@@ -19,12 +19,27 @@ Usage scenarios:
 - Cases requiring visual steganography with SVG support
 */
 
-use crate::stego::Encoder;
 use crate::Result;
-use tracing::{debug, info, warn};
+use rand::Rng;
+use tracing::{debug, info, trace, warn};
+
+use crate::stego::{Encoder, Random};
+
+#[derive(Debug, Clone)]
 
 pub struct SvgPathEncoder {
     viewbox_size: (u32, u32),
+}
+
+impl Random for SvgPathEncoder {
+    fn random() -> Self {
+        let mut rng = rand::thread_rng();
+        let width = rng.gen_range(400..1200);
+        let height = (width as f32 * rng.gen_range(0.5..1.5)) as u32;
+        Self {
+            viewbox_size: (width, height),
+        }
+    }
 }
 
 impl Default for SvgPathEncoder {
@@ -46,6 +61,10 @@ impl Encoder for SvgPathEncoder {
 
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
         decode(content)
+    }
+
+    fn get_mime_type(&self) -> &'static str {
+        "image/svg+xml"
     }
 }
 
@@ -157,7 +176,7 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
                 // Restore byte values from coordinates
                 let byte = ((y / 10) * 16 + x / 10) as u8;
                 result.push(byte);
-                debug!("Decoded coordinates ({},{}) to byte: {}", x, y, byte);
+                trace!("Decoded coordinates ({},{}) to byte: {}", x, y, byte);
             }
         }
     }

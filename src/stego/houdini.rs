@@ -12,17 +12,31 @@
  * - Suitable for web-based steganography scenarios
  */
 
+use fake::{Fake, Faker};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::stego::Encoder;
+use crate::stego::{Encoder, Random};
 use crate::Result;
+
+#[derive(Debug, Clone)]
 
 pub struct HoudiniEncoder {
     worklet_name: String,
     class_name: String,
     property_name: String,
     painter_class_name: String,
+}
+
+impl Random for HoudiniEncoder {
+    fn random() -> Self {
+        Self {
+            worklet_name: format!("paint-{}", Faker.fake::<String>().to_lowercase()),
+            class_name: format!("container-{}", Faker.fake::<String>().to_lowercase()),
+            property_name: format!("--param-{}", Faker.fake::<String>().to_lowercase()),
+            painter_class_name: format!("Painter{}", Faker.fake::<String>()),
+        }
+    }
 }
 
 impl Default for HoudiniEncoder {
@@ -53,6 +67,10 @@ impl Encoder for HoudiniEncoder {
 
     fn decode(&self, content: &[u8]) -> Result<Vec<u8>> {
         decode(content)
+    }
+
+    fn get_mime_type(&self) -> &'static str {
+        "text/css"
     }
 }
 
