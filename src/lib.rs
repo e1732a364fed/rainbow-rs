@@ -62,6 +62,12 @@ pub struct EncodeResult {
     pub expected_return_packet_lengths: Vec<usize>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct EncodeOptions {
+    pub mime_type: Option<String>,
+    pub encoder: Option<String>,
+}
+
 /// Trait NetworkSteganographyProcessor provides a way to encode and decode data into a series of network packets.
 ///
 /// Every write will convert data to a series of alternating network packets, in which each
@@ -69,12 +75,12 @@ pub struct EncodeResult {
 ///
 /// Every read will parse out the data, and metadata like expected_return_length and is_read_end.
 pub trait NetworkSteganographyProcessor: DynClone {
-    /// Encode data into a series of network packets
+    /// Encode data into a series of network packets by a certain mime type
     fn encode_write(
         &self,
         data: &[u8],
         is_client: bool,
-        mime_type: Option<String>,
+        options: EncodeOptions,
     ) -> Result<EncodeResult>;
 
     /// Decrypt a single packet of data

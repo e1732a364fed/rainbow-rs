@@ -106,10 +106,8 @@ fn byte_to_path(byte: u8, index: usize) -> String {
     )
 }
 
-/// Generate complete SVG document
-fn generate_svg_document(paths: &[String], viewbox_size: (u32, u32)) -> String {
-    format!(
-        r#"<!DOCTYPE html>
+/*
+<!DOCTYPE html>
 <html>
 <head>
     <title>Interactive Art</title>
@@ -119,16 +117,21 @@ fn generate_svg_document(paths: &[String], viewbox_size: (u32, u32)) -> String {
     </style>
 </head>
 <body>
-    <svg viewBox="0 0 {} {}">
+</body>
+</html>
+*/
+
+/// Generate complete SVG document
+fn generate_svg_document(paths: &[String], viewbox_size: (u32, u32)) -> String {
+    format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 {} {}">
         <defs>
             <filter id="blur">
                 <feGaussianBlur stdDeviation="0.5"/>
             </filter>
         </defs>
         {}
-    </svg>
-</body>
-</html>"#,
+    </svg>"#,
         viewbox_size.0,
         viewbox_size.1,
         paths.join("\n")

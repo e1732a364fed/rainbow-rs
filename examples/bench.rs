@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert!(subscriber.is_ok(), "Failed to initialize logging");
 
     let rainbow = Arc::new(Rainbow::new());
-    let mime_types: Vec<_> = rainbow.encoders.get_all_mime_types();
+    let mime_types: Vec<_> = rainbow.registry.get_all_mime_types();
     let test_sizes = vec![100, 500, 1000, 2000, 5000, 10000, 100 * 1024, 1024 * 1024];
 
     // 为每个 MIME 类型创建计数器

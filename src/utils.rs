@@ -46,6 +46,17 @@ pub fn find_matching_brace(text: &str, left_bracket_index: usize) -> Option<usiz
     None
 }
 
+pub fn mime_to_extension(mime_type: &str) -> &str {
+    let sub_str = mime_type.split('/').last().unwrap_or_default();
+
+    match sub_str {
+        "plain" => "txt",
+        "octet-stream" => return "bin",
+        "svg+xml" => "svg",
+        _ => sub_str,
+    }
+}
+
 #[test]
 fn test_find_matching_brace() {
     // 测试简单的大括号匹配

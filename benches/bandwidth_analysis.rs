@@ -15,7 +15,7 @@ fn analyze_bandwidth(mime_type: &str, size: usize) -> f64 {
     if let Some(stat) = stats.first() {
         let _overhead_ratio =
             (stat.total_packet_size + stat.expected_return_size) as f64 / stat.original_size as f64;
-        
+
         test_start.elapsed().as_secs_f64() * 1000.0
     } else {
         0.0
@@ -85,7 +85,7 @@ fn parallel_analyze_bandwidth(mime_types: &[&str], sizes: &[usize]) -> HashMap<S
 fn criterion_benchmark(c: &mut Criterion) {
     // 获取支持的 MIME 类型
     let rainbow = Rainbow::new();
-    let mime_types: Vec<_> = rainbow.encoders.get_all_mime_types();
+    let mime_types: Vec<_> = rainbow.registry.get_all_mime_types();
     let test_sizes = [100, 1000, 10000, 100 * 1024];
 
     // 单个 MIME 类型和大小的基准测试

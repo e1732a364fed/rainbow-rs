@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use rainbow::rainbow::Rainbow;
-use rainbow::{DecodeResult, EncodeResult, NetworkSteganographyProcessor};
+use rainbow::{DecodeResult, EncodeOptions, EncodeResult, NetworkSteganographyProcessor};
 use tracing::info;
 
 #[derive(Parser)]
@@ -75,7 +75,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let EncodeResult {
                 encoded_packets: packets,
                 expected_return_packet_lengths: lengths,
-            } = rainbow.encode_write(&data, client, mime_type)?;
+            } = rainbow.encode_write(
+                &data,
+                client,
+                EncodeOptions {
+                    mime_type: mime_type,
+                    ..Default::default()
+                },
+            )?;
 
             // Create output directory
             fs::create_dir_all(&output)?;

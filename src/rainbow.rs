@@ -18,7 +18,7 @@ use tracing::{debug, info};
 use crate::{
     stego::EncoderRegistry,
     utils::{find_crlf_crlf, generate_realistic_headers, validate_http_packet, HTTP_CONSTANTS},
-    DecodeResult, EncodeResult, NetworkSteganographyProcessor, RainbowError, Result,
+    DecodeResult, EncodeOptions, EncodeResult, NetworkSteganographyProcessor, RainbowError, Result,
 };
 
 const CHUNK_SIZE: usize = 256;
@@ -65,7 +65,7 @@ pub struct StegoBandwidthStats {
 /// An implementation of [`NetworkSteganographyProcessor`]
 #[derive(Debug, Clone)]
 pub struct Rainbow {
-    pub encoders: EncoderRegistry,
+    pub registry: EncoderRegistry,
 }
 
 impl Default for Rainbow {
@@ -77,7 +77,7 @@ impl Default for Rainbow {
 impl Rainbow {
     pub fn new() -> Self {
         Self {
-            encoders: EncoderRegistry::new_randomized(),
+            registry: EncoderRegistry::new_randomized(),
         }
     }
 
@@ -299,14 +299,14 @@ impl Rainbow {
         // 处理 POST 请求
         // 获取 MIME 类型
         if first_line.starts_with("GET") {
-            let decoded = self.encoders.decode_mime(&data_to_decode, "text/plain");
+            let decoded = self.registry.decode_mime(&data_to_decode, "text/plain");
 
             if let Ok(decoded) = decoded {
                 debug!("Successfully decoded content: length={}", decoded.len());
                 Ok(decoded)
             } else {
                 let decoded = self
-                    .encoders
+                    .registry
                     .decode_mime(&data_to_decode, "application/json");
                 if let Ok(decoded) = decoded {
                     debug!("Successfully decoded content: length={}", decoded.len());
@@ -335,7 +335,7 @@ impl Rainbow {
             );
 
             // 解码数据
-            let decoded = self.encoders.decode_mime(&data_to_decode, mime_type)?;
+            let decoded = self.registry.decode_mime(&data_to_decode, mime_type)?;
             debug!("Successfully decoded content: length={}", decoded.len());
 
             Ok(decoded)
@@ -365,7 +365,7 @@ impl Rainbow {
             let mid = (left + right) / 2;
             let random_data: Vec<u8> = (0..mid).map(|_| rand::random()).collect();
 
-            let encoded = self.encoders.encode_mime(&random_data, mime_type)?;
+            let encoded = self.registry.encode_mime(&random_data, mime_type)?;
 
             fn calculate_total_length(headers: &str, encoded: &[u8]) -> Result<usize> {
                 let content_length_str = encoded.len().to_string();
@@ -446,7 +446,7 @@ impl Rainbow {
         let mime_type = if is_small_packet {
             "application/json".to_string()
         } else {
-            self.encoders.get_random_mime_type()
+            self.registry.get_random_mime_type()
         };
 
         // 添加基础头部
@@ -504,7 +504,14 @@ impl Rainbow {
         let EncodeResult {
             encoded_packets,
             expected_return_packet_lengths,
-        } = self.encode_write(data, true, mime_type)?;
+        } = self.encode_write(
+            data,
+            true,
+            EncodeOptions {
+                mime_type: mime_type,
+                ..Default::default()
+            },
+        )?;
 
         let stats = StegoBandwidthStats {
             original_size: data.len(),
@@ -538,7 +545,7 @@ impl NetworkSteganographyProcessor for Rainbow {
         &self,
         data: &[u8],
         is_client: bool,
-        mime_type: Option<String>,
+        options: EncodeOptions,
     ) -> Result<EncodeResult> {
         debug!("Encoding {} bytes of data", data.len());
 
@@ -551,11 +558,13 @@ impl NetworkSteganographyProcessor for Rainbow {
         for (i, chunk) in chunks.iter().enumerate() {
             let packet_info = PacketInfo::new(i, total_chunks, chunk.len());
 
-            let mime = mime_type
-                .clone()
-                .unwrap_or_else(|| self.encoders.get_random_mime_type());
+            let o = options.clone();
 
-            let encoded = self.encoders.encode_mime(chunk, &mime)?;
+            let mime = o
+                .mime_type
+                .unwrap_or_else(|| self.registry.get_random_mime_type());
+
+            let encoded = self.registry.encode_mime(chunk, &mime)?;
 
             debug!("encoded.len: {:?}", encoded.len());
 
@@ -844,7 +853,9 @@ mod tests {
         let EncodeResult {
             encoded_packets: packets,
             expected_return_packet_lengths: lengths,
-        } = rainbow.encode_write(test_data, true, None).unwrap();
+        } = rainbow
+            .encode_write(test_data, true, EncodeOptions::default())
+            .unwrap();
 
         assert!(!packets.is_empty());
         assert_eq!(packets.len(), lengths.len());
@@ -861,7 +872,9 @@ mod tests {
         let EncodeResult {
             encoded_packets: packets_exact,
             expected_return_packet_lengths: lengths_exact,
-        } = rainbow.encode_write(&test_data_exact, true, None).unwrap();
+        } = rainbow
+            .encode_write(&test_data_exact, true, EncodeOptions::default())
+            .unwrap();
         assert_eq!(
             packets_exact.len(),
             2,
@@ -874,7 +887,9 @@ mod tests {
         let EncodeResult {
             encoded_packets: packets_over,
             expected_return_packet_lengths: lengths_over,
-        } = rainbow.encode_write(&test_data_over, true, None).unwrap();
+        } = rainbow
+            .encode_write(&test_data_over, true, EncodeOptions::default())
+            .unwrap();
         assert_eq!(
             packets_over.len(),
             3,
@@ -887,7 +902,9 @@ mod tests {
         let EncodeResult {
             encoded_packets: packets_under,
             expected_return_packet_lengths: _,
-        } = rainbow.encode_write(&test_data_under, true, None).unwrap();
+        } = rainbow
+            .encode_write(&test_data_under, true, EncodeOptions::default())
+            .unwrap();
         assert_eq!(
             packets_under.len(),
             3,
@@ -917,7 +934,9 @@ mod tests {
         let EncodeResult {
             encoded_packets: packets_large,
             expected_return_packet_lengths: lengths_large,
-        } = rainbow.encode_write(&test_data_large, true, None).unwrap();
+        } = rainbow
+            .encode_write(&test_data_large, true, EncodeOptions::default())
+            .unwrap();
         assert_eq!(packets_large.len(), 6);
         assert_eq!(lengths_large.len(), 6);
 
@@ -936,7 +955,14 @@ mod tests {
                 encoded_packets: packets_mime,
                 expected_return_packet_lengths: _,
             } = rainbow
-                .encode_write(&test_data_over, true, Some(mime_type.to_string()))
+                .encode_write(
+                    &test_data_over,
+                    true,
+                    EncodeOptions {
+                        mime_type: Some(mime_type.to_string()),
+                        ..Default::default()
+                    },
+                )
                 .unwrap();
 
             // Verify MIME type specific behavior
@@ -976,14 +1002,18 @@ mod tests {
         let EncodeResult {
             encoded_packets: _,
             expected_return_packet_lengths: client_lengths,
-        } = rainbow.encode_write(test_data, true, None).unwrap();
+        } = rainbow
+            .encode_write(test_data, true, EncodeOptions::default())
+            .unwrap();
         assert!(client_lengths[0] >= 200 && client_lengths[0] <= 8000);
 
         // 测试服务器发送（期待客户端请求）
         let EncodeResult {
             encoded_packets: _,
             expected_return_packet_lengths: server_lengths,
-        } = rainbow.encode_write(test_data, false, None).unwrap();
+        } = rainbow
+            .encode_write(test_data, false, EncodeOptions::default())
+            .unwrap();
         assert!(server_lengths[0] >= 100 && server_lengths[0] <= 2000);
     }
 
@@ -997,7 +1027,9 @@ mod tests {
         let EncodeResult {
             encoded_packets: request_packets,
             expected_return_packet_lengths: _,
-        } = rainbow.encode_write(test_data, true, None).unwrap();
+        } = rainbow
+            .encode_write(test_data, true, EncodeOptions::default())
+            .unwrap();
         let request = &request_packets[0];
         assert!(request.starts_with(b"GET ") || request.starts_with(b"POST "));
 
@@ -1005,7 +1037,9 @@ mod tests {
         let EncodeResult {
             encoded_packets: response_packets,
             expected_return_packet_lengths: _,
-        } = rainbow.encode_write(test_data, false, None).unwrap();
+        } = rainbow
+            .encode_write(test_data, false, EncodeOptions::default())
+            .unwrap();
         let response = &response_packets[0];
         assert!(response.starts_with(b"HTTP/1.1"));
     }
@@ -1037,7 +1071,10 @@ mod tests {
             .encode_write(
                 test_data,
                 true,
-                Some("application/octet-stream".to_string()),
+                EncodeOptions {
+                    mime_type: Some("application/octet-stream".to_string()),
+                    ..Default::default()
+                },
             )
             .unwrap();
 
@@ -1062,7 +1099,7 @@ mod tests {
         let test_data = b"Hello, MIME Type Testing!";
 
         // 获取所有支持的 MIME 类型
-        let mime_types = rainbow.encoders.get_all_mime_types();
+        let mime_types = rainbow.registry.get_all_mime_types();
 
         for mime_type in mime_types {
             debug!("Testing MIME type: {}", mime_type);
@@ -1072,7 +1109,14 @@ mod tests {
                 encoded_packets: packets,
                 expected_return_packet_lengths: _lengths,
             } = rainbow
-                .encode_write(test_data, true, Some(mime_type.to_string()))
+                .encode_write(
+                    test_data,
+                    true,
+                    EncodeOptions {
+                        mime_type: Some(mime_type.to_string()),
+                        ..Default::default()
+                    },
+                )
                 .unwrap();
 
             // 验证生成的数据包
